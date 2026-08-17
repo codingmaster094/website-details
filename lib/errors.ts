@@ -10,13 +10,23 @@ export class AnalysisError extends Error {
       | "INVALID_GEMINI_RESPONSE"
       | "RATE_LIMITED"
       | "SSRF_BLOCKED"
-      | "CONFIG_ERROR",
+      | "CONFIG_ERROR"
+      | "INVALID_MAPS_URL"
+      | "PLACES_ERROR",
     message: string,
     public readonly status = 400,
   ) {
     super(message);
     this.name = "AnalysisError";
   }
+}
+
+export const CRAWLER_DENIED_MESSAGE = "The website denied access to this crawler.";
+
+export function isCrawlerDenied(error?: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "ACCESS_DENIED") return true;
+  return (error.message || "").toLowerCase().includes("denied access to this crawler");
 }
 
 export function errorResponse(error: unknown) {

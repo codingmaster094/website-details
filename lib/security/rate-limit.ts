@@ -1,5 +1,5 @@
 const WINDOW_MS = 60_000;
-const MAX_REQUESTS = 8;
+const MAX_REQUESTS = 45;
 
 type Bucket = { timestamps: number[] };
 

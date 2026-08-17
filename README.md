@@ -55,7 +55,10 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), enter a public company URL, and click **Analyze Website**.
+Open [http://localhost:3000](http://localhost:3000).
+
+- **Single Website:** enter `https://example.com` and click **Analyze Website**.
+- **Website List:** paste one URL per line and click **Analyze Website List**.
 
 ## Scripts
 
@@ -73,13 +76,7 @@ Open [http://localhost:3000](http://localhost:3000), enter a public company URL,
 { "url": "https://example.com" }
 ```
 
-Success:
-
-```json
-{ "success": true, "data": { } }
-```
-
-Excel export: `POST /api/export/excel` with the analysis object. The UI also provides Copy JSON, Download JSON, and Download Excel (`website-analysis-YYYY-MM-DD.xlsx`).
+Excel export: `POST /api/export/excel` with the analysis object.
 
 ## Security
 

@@ -1,36 +1,51 @@
 import * as XLSX from "xlsx";
 import type { CompanyAnalysis } from "@/lib/validation/company-schema";
 
-export function analysisToExcelBuffer(analysis: CompanyAnalysis): Buffer {
-  const row = {
-    "Company Name": analysis.company.name ?? "",
-    Website: analysis.company.website ?? "",
-    Description: analysis.company.description ?? "",
-    Industry: analysis.company.industry ?? "",
-    Address: analysis.company.address ?? "",
-    Phone: analysis.company.phone ?? "",
-    Email: analysis.company.email ?? "",
-    Owner: analysis.company.owner ?? "",
-    "Founded Year": analysis.company.foundedYear ?? "",
-    Services: analysis.services.map((s) => s.name).join("; "),
-    Technologies: analysis.technologies.map((t) => t.name).join("; "),
-    "Service Technology Mapping": analysis.serviceTechnologyMapping
-      .map((m) => `${m.service}: ${m.technologies.join(", ")}`)
-      .join("; "),
-    Team: analysis.team.map((t) => `${t.name}${t.role ? ` (${t.role})` : ""}`).join("; "),
-    "Social Media": analysis.socialMedia.map((s) => `${s.platform}: ${s.url}`).join("; "),
-    "Overall Confidence": analysis.dataQuality.overallConfidence,
-  };
+function servicesCell(analysis: CompanyAnalysis): string {
+  const names = analysis.services.map((service) => service.name).filter(Boolean);
+  const extra = analysis.serviceTechnologyMapping
+    .map((item) => item.service)
+    .filter((name) => !names.some((existing) => existing.toLowerCase() === name.toLowerCase()));
+  return [...names, ...extra].join(", ");
+}
 
+function technologiesCell(analysis: CompanyAnalysis): string {
+  const fromDetection = analysis.technologies.map((tech) => tech.name).filter(Boolean);
+  const fromMapping = analysis.serviceTechnologyMapping.flatMap((item) => item.technologies);
+  return [...new Set([...fromDetection, ...fromMapping])].join(", ");
+}
+
+export function analysisToRow(analysis: CompanyAnalysis) {
+  return {
+    "Company Name": analysis.company.name ?? "",
+    "Company Email": analysis.company.email ?? "",
+    "Company Phone": analysis.company.phone ?? "",
+    Services: servicesCell(analysis),
+    Technologies: technologiesCell(analysis),
+  };
+}
+
+export type ExcelDetailRow = {
+  "Company Name": string;
+  "Company Email": string;
+  "Company Phone": string;
+  Services: string;
+  Technologies: string;
+};
+
+export function analysisToExcelBuffer(analysis: CompanyAnalysis): Buffer {
+  return analysesToExcelBuffer([analysis]);
+}
+
+export function analysesToExcelBuffer(analyses: CompanyAnalysis[]): Buffer {
+  return detailRowsToExcelBuffer(analyses.map(analysisToRow));
+}
+
+export function detailRowsToExcelBuffer(rows: ExcelDetailRow[]): Buffer {
   const workbook = XLSX.utils.book_new();
-  const sheet = XLSX.utils.json_to_sheet([row]);
+  const sheet = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(workbook, sheet, "Website Analysis");
-  const servicesSheet = XLSX.utils.json_to_sheet(analysis.services);
-  XLSX.utils.book_append_sheet(workbook, servicesSheet, "Services");
-  const techSheet = XLSX.utils.json_to_sheet(analysis.technologies);
-  XLSX.utils.book_append_sheet(workbook, techSheet, "Technologies");
-  const bytes = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
-  return bytes;
+  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
 }
 
 export function excelFilename(date = new Date()): string {
