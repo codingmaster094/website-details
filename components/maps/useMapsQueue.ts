@@ -39,7 +39,7 @@ export function useMapsQueue() {
   const processOne = useCallback(
     async (company: MapsCompany) => {
       updateCompany(company.id, { status: "finding_website", error: undefined, progress: 10 });
-      let websiteUrl = company.websiteUrl;
+      const websiteUrl = company.websiteUrl;
 
       if (!websiteUrl) {
         updateCompany(company.id, {
