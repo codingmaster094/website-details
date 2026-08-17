@@ -4,6 +4,24 @@ Production-ready Next.js app that takes a single company website URL, crawls a l
 
 Gemini never browses the website. The crawler collects evidence first, then Gemini analyzes that payload.
 
+## Vercel
+
+This is a **Next.js** app, not a static `public` folder site.
+
+In Vercel Project Settings:
+
+1. **Framework Preset:** Next.js
+2. **Build Command:** `npm run build`
+3. **Output Directory:** leave **empty** (do not set `public`)
+4. **Install Command:** `npm install`
+
+Add environment variables:
+
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL` = `gemini-2.5-flash` (optional)
+
+Then redeploy.
+
 ## Setup
 
 1. Copy environment variables:
