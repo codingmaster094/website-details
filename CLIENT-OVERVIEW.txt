@@ -1,0 +1,228 @@
+WEBSITE ANALYZER
+Client Overview – What This Module Is and How It Works
+=====================================================
+
+1. WHAT THIS MODULE IS
+----------------------
+Website Analyzer is a company-research tool.
+
+The user gives one or more company website URLs.
+The system reads those websites, studies the public pages, and prepares
+a structured company profile.
+
+It does NOT guess company information from the internet at random.
+It only uses content found on the company’s own website.
+
+Output for each company:
+- Company Name
+- Company Email
+- Company Phone
+- Services
+- Technologies
+
+
+2. WHO IT IS FOR
+----------------
+This module is useful when a sales / research / BD team needs
+quick company intelligence from official websites, for example:
+
+- 40+ companies per day
+- lead research
+- vendor / competitor mapping
+- service and technology profiling
+
+
+3. WHAT THE USER SEES
+---------------------
+There are two modes.
+
+A) Single Website
+   - Enter one URL, example: https://example.com
+   - Click “Analyze Website”
+   - See one company result in a table
+   - Download that result if needed
+
+B) Website List
+   - Paste many URLs, one per line
+   - Optional format: Company Name | https://company.com
+   - Click “Analyze Website List”
+   - The system analyzes companies one by one
+   - Completed results appear in one combined table
+   - One button: “Download All Excel”
+   - No separate download for each company
+
+
+4. HOW IT WORKS (SIMPLE FLOW)
+-----------------------------
+Step 1: User submits website URL(s)
+
+Step 2: Server opens the website
+        - Homepage is fetched
+        - Important internal pages are found
+          (about, services, contact, team, etc.)
+        - Maximum about 10 pages per website
+        - The full website is NOT crawled
+
+Step 3: Clean content is extracted
+        - Title, headings, paragraphs
+        - Emails and phone numbers found on pages
+        - Contact / social links if present
+        - Scripts, ads, and extra HTML noise are removed
+
+Step 4: Technologies are detected from the website code
+        Examples: WordPress, React, Next.js, Shopify,
+        Google Analytics, Google Tag Manager, etc.
+        A technology is listed only when there is evidence.
+
+Step 5: Collected website text is sent to Gemini AI
+        Gemini does NOT browse the website itself.
+        It only reads the content collected by our crawler.
+
+Step 6: Gemini returns structured company data in JSON
+
+Step 7: The system validates that JSON
+        If a field is not clearly available on the website,
+        it is left empty / shown as not available.
+        The AI is instructed not to invent emails, phones,
+        owners, services, or technologies.
+
+Step 8: Result is shown in the table
+        Website List mode also allows one Excel file for all companies.
+
+
+5. WHAT DATA IS PRODUCED
+------------------------
+Table columns:
+
+Company Name     Official name found on the website
+Company Email    Email found on the website (not created by AI)
+Company Phone    Phone found on the website (not created by AI)
+Services         Services the company publicly offers
+Technologies     Technologies found on the website / used in delivery
+
+Excel file name example:
+website-analysis-YYYY-MM-DD.xlsx
+
+Excel contains the same columns for all analyzed companies.
+
+
+6. IMPORTANT RULES (ACCURACY)
+-----------------------------
+- Only public website content is used
+- No fake email or phone numbers
+- No services that the website does not mention
+- No technologies without evidence
+- Owner / founder is not assumed just because a name appears
+- If information is not clear, the field stays empty
+
+
+7. IF A WEBSITE BLOCKS THE TOOL
+-------------------------------
+Some websites block automated reading (403 / bot protection).
+
+In that case:
+- The system does NOT force analysis
+- It does NOT invent data
+- It only records:
+  “The website denied access to this crawler.”
+- Other companies in the list continue normally
+
+
+8. WEBSITE LIST QUEUE
+---------------------
+When many URLs are pasted:
+
+Company 1 → fetch website → analyze → save
+Company 2 → fetch website → analyze → save
+Company 3 → ...
+
+Websites are processed one after another, not all at the same time.
+This avoids overload, rate limits, and mixed progress.
+
+The user can:
+- Pause
+- Resume
+- Stop
+- Retry failed websites
+
+Same website URL is not analyzed twice unnecessarily.
+Shared result is reused.
+
+
+9. AI MODEL USED
+----------------
+The analysis engine uses Google Gemini.
+
+Recommended for daily 40+ companies:
+GEMINI_MODEL = gemini-3.6-flash
+
+Why this model:
+- Fast enough for bulk daily research
+- Good structured JSON output
+- Lower cost than Pro models
+- Suitable for website text → company profile
+
+The AI key stays on the server only.
+It is never shown in the browser.
+
+
+10. WHAT THIS MODULE DOES NOT DO
+--------------------------------
+- It does not scrape Google Maps listings
+- It does not find companies from a Maps search URL
+- It does not guess a company website if none is given
+- It does not log into private pages
+- It does not read emails from inboxes
+- It does not claim 100% complete data if the website is thin or blocked
+
+
+11. SECURITY
+------------
+- Only http and https websites are allowed
+- Local / internal / private network URLs are blocked
+- Timeouts and size limits protect the server
+- API keys remain on the server
+
+
+12. WHAT THE CLIENT NEEDS TO USE IT
+-----------------------------------
+1. Open the Website Analyzer
+2. Choose Single Website or Website List
+3. Paste official company website URL(s)
+4. Click Analyze
+5. Review the table
+6. Download Excel (especially in Website List mode)
+
+For Website List, paste like this:
+
+https://company1.com
+https://company2.com
+Acme Software | https://acmesoftware.com
+
+
+13. TYPICAL DAILY USE (40+ COMPANIES)
+-------------------------------------
+1. Collect 40 company website URLs
+2. Open Website List
+3. Paste all URLs
+4. Click Analyze Website List
+5. Wait while the queue runs one by one
+   (time depends on website speed; often several minutes)
+6. Download one Excel with all completed rows
+
+Blocked websites appear in the sheet with the access-denied note.
+They are not mixed up as fake company profiles.
+
+
+14. SUMMARY FOR THE CLIENT
+--------------------------
+This module turns official company websites into a clean research table:
+
+URL(s) → website reading → AI analysis → Name / Email / Phone / Services / Technologies → Excel
+
+It is built for accuracy first, not for inventing missing data.
+That is why some fields may be empty when the website does not publish them.
+
+=====================================================
+End of document
+=====================================================

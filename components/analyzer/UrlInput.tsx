@@ -39,14 +39,14 @@ export function UrlInput({ mode, value, loading, onModeChange, onChange, onSubmi
       </div>
       {isList ? (
         <p className="text-sm text-[#9aa8c7]">
-          One website per line. Optional name: <code>Narola Infotech | https://narolainfotech.com</code>
+          One website per line. Optional name: <code>Narola Infotech | https://trio-spire.vercel.app/</code>
         </p>
       ) : null}
       <div className="flex flex-col gap-3 md:flex-row">
         {isList ? (
           <textarea
             className="min-h-36 flex-1 rounded-xl border border-[#2a3a57] bg-[#0f1730] px-4 py-3 text-base text-white outline-none ring-[#5b8cff] placeholder:text-[#7f8db0] focus:ring-2"
-            placeholder={"https://narolainfotech.com\nhttps://techstaunch.com\nhttps://iroidsolutions.com"}
+            placeholder={"https://trio-spire.vercel.app/\nhttps://techstaunch.com\nhttps://iroidsolutions.com"}
             value={value}
             onChange={(event) => onChange(event.target.value)}
             disabled={loading}
