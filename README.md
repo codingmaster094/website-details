@@ -18,7 +18,7 @@ In Vercel Project Settings:
 Add environment variables:
 
 - `GEMINI_API_KEY`
-- `GEMINI_MODEL` = `gemini-2.5-flash` (optional)
+- `GEMINI_MODEL` = `gemini-3.6-flash` (optional)
 
 Then redeploy.
 
@@ -41,7 +41,7 @@ Copy-Item .env.example .env.local
 Optional:
 
 ```
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.6-flash
 MAX_PAGES=10
 FETCH_TIMEOUT_MS=15000
 MAX_RESPONSE_BYTES=1500000
