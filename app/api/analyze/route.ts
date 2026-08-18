@@ -47,13 +47,13 @@ export async function POST(request: NextRequest) {
 
     const started = Date.now();
     const crawl = await crawlWebsite(url, {
-      maxPages: fast ? 3 : undefined,
-      fetchTimeoutMs: fast ? 6_000 : undefined,
-      maxRetries: fast ? 0 : undefined,
-      deadlineAt: started + (fast ? 18_000 : 28_000),
+      maxPages: fast ? 1 : 4,
+      fetchTimeoutMs: fast ? 5_000 : 8_000,
+      maxRetries: 0,
+      deadlineAt: started + (fast ? 12_000 : 22_000),
     });
 
-    const remaining = 50_000 - (Date.now() - started);
+    const remaining = 40_000 - (Date.now() - started);
     if (remaining < 4_000) {
       throw new AnalysisError("TIMEOUT", "This website took too long to analyze.", 504);
     }

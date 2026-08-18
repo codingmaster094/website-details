@@ -2,15 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CRAWLER_DENIED_MESSAGE, isCrawlerDenied } from "@/lib/errors";
+import { friendlyClientError, readAnalyzePayload } from "@/lib/client/read-analyze-payload";
 import type { CompanyAnalysis } from "@/lib/validation/company-schema";
 import { normalizeWebsiteKey } from "@/lib/maps/website";
 import type { MapsCompany } from "@/lib/maps/types";
-
-type AnalyzeResponse = {
-  success: boolean;
-  data?: CompanyAnalysis;
-  error?: { code?: string; message?: string };
-};
 
 type QueueMode = "idle" | "running" | "paused" | "stopped";
 
@@ -79,24 +74,11 @@ export function useMapsQueue() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: websiteUrl, fast: true }),
-        signal: AbortSignal.timeout(52_000),
+        signal: AbortSignal.timeout(45_000),
       }).catch((err: unknown) => {
-        if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
-          throw new Error("This website took too long to analyze. Skipped so the list can continue.");
-        }
-        throw err;
+        throw new Error(friendlyClientError(err));
       });
-      const raw = await analyzeRes.text();
-      let analyzePayload: AnalyzeResponse;
-      try {
-        analyzePayload = JSON.parse(raw) as AnalyzeResponse;
-      } catch {
-        throw new Error(
-          /FUNCTION_INVOCATION_TIMEOUT|timeout/i.test(raw)
-            ? "This website took too long to analyze. Skipped so the list can continue."
-            : "Server returned an invalid response. Skipped this website.",
-        );
-      }
+      const analyzePayload = await readAnalyzePayload<CompanyAnalysis>(analyzeRes);
       if (!analyzePayload.success || !analyzePayload.data) {
         if (isCrawlerDenied(analyzePayload.error)) {
           deniedCache.current.add(key);
@@ -134,7 +116,7 @@ export function useMapsQueue() {
         try {
           await processOne(next);
         } catch (err) {
-          const message = err instanceof Error ? err.message : "Analysis failed.";
+          const message = friendlyClientError(err);
           updateCompany(next.id, {
             status: isCrawlerDenied({ message }) ? "access_denied" : "failed",
             error: isCrawlerDenied({ message }) ? CRAWLER_DENIED_MESSAGE : message,

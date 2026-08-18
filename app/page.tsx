@@ -8,13 +8,8 @@ import { UrlInput, type InputMode } from "@/components/analyzer/UrlInput";
 import { MapsDashboard } from "@/components/maps/MapsDashboard";
 import { useMapsQueue } from "@/components/maps/useMapsQueue";
 import { CRAWLER_DENIED_MESSAGE, isCrawlerDenied } from "@/lib/errors";
+import { friendlyClientError, readAnalyzePayload } from "@/lib/client/read-analyze-payload";
 import type { CompanyAnalysis } from "@/lib/validation/company-schema";
-
-type ApiResponse = {
-  success: boolean;
-  data?: CompanyAnalysis;
-  error?: { code?: string; message?: string };
-};
 
 export default function HomePage() {
   const [mode, setMode] = useState<InputMode>("website");
@@ -60,8 +55,9 @@ export default function HomePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
+        signal: AbortSignal.timeout(55_000),
       });
-      const payload = (await response.json()) as ApiResponse;
+      const payload = await readAnalyzePayload<CompanyAnalysis>(response);
       if (!payload.success || !payload.data) {
         if (isCrawlerDenied(payload.error)) {
           setDenied(true);
@@ -73,7 +69,7 @@ export default function HomePage() {
       setStep("Completed");
       setAnalysis(payload.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Analysis failed.");
+      setError(friendlyClientError(err));
     } finally {
       timers.forEach(clearTimeout);
       setLoading(false);

@@ -5,7 +5,7 @@ import { OUTPUT_SCHEMA_INSTRUCTIONS, SYSTEM_PROMPT } from "@/lib/gemini/prompts"
 import { companyAnalysisSchema, type CompanyAnalysis } from "@/lib/validation/company-schema";
 
 const DEFAULT_MODEL = "gemini-3.6-flash";
-const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"];
+const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite"];
 
 function getApiKey() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -16,8 +16,8 @@ function getApiKey() {
 }
 
 function normalizeModelName(value?: string | null) {
-  const name = value?.trim().replace(/^["']|["']$/g, "");
-  if (!name || name === "gemini-2.5-flash") return DEFAULT_MODEL;
+  const name = value?.trim().replace(/^["']|["']$/g, "") || DEFAULT_MODEL;
+  if (/gemini-2\./i.test(name) || /2\.5-flash/i.test(name)) return DEFAULT_MODEL;
   return name;
 }
 
@@ -39,6 +39,11 @@ function getModel(modelName: string) {
 function isQuotaError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return /429|Too Many Requests|quota|RESOURCE_EXHAUSTED/i.test(message);
+}
+
+function isUnavailableModel(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /404 Not Found|no longer available|not found/i.test(message);
 }
 
 function buildUserPrompt(crawl: CrawlResult, contentLimit: number): string {
@@ -82,7 +87,6 @@ export async function analyzeCompanyWithGemini(
   const models = options.fast ? [normalizeModelName(process.env.GEMINI_MODEL)] : modelCandidates();
   const attempts = options.fast ? 1 : 2;
 
-  let lastError: unknown;
   let lastQuotaError: unknown;
 
   for (const modelName of models) {
@@ -99,15 +103,16 @@ export async function analyzeCompanyWithGemini(
         const parsed = extractJson(text);
         const validated = companyAnalysisSchema.safeParse(parsed);
         if (!validated.success) {
-          lastError = validated.error;
           continue;
         }
         return mergeDeterministicSignals(validated.data, crawl);
       } catch (error) {
-        lastError = error;
         if (error instanceof AnalysisError && error.code === "CONFIG_ERROR") throw error;
         if (isQuotaError(error)) {
           lastQuotaError = error;
+          break;
+        }
+        if (isUnavailableModel(error)) {
           break;
         }
       }
@@ -122,11 +127,7 @@ export async function analyzeCompanyWithGemini(
     );
   }
 
-  throw new AnalysisError(
-    "INVALID_GEMINI_RESPONSE",
-    `Gemini response could not be validated. ${lastError instanceof Error ? lastError.message : ""}`.trim(),
-    502,
-  );
+  throw new AnalysisError("INVALID_GEMINI_RESPONSE", "Gemini could not return a valid analysis for this website.", 502);
 }
 
 function mergeDeterministicSignals(analysis: CompanyAnalysis, crawl: CrawlResult): CompanyAnalysis {
