@@ -32,6 +32,7 @@ function getModel(modelName: string) {
     generationConfig: {
       temperature: 0.1,
       responseMimeType: "application/json",
+      maxOutputTokens: 4096,
     },
   });
 }
@@ -78,14 +79,62 @@ function extractJson(text: string): unknown {
   return JSON.parse(candidate);
 }
 
+export function analysisFromCrawl(crawl: CrawlResult): CompanyAnalysis {
+  const homepage = crawl.pages[0];
+  const host = (() => {
+    try {
+      return new URL(crawl.websiteUrl).hostname.replace(/^www\./, "");
+    } catch {
+      return crawl.websiteUrl;
+    }
+  })();
+
+  return {
+    company: {
+      name: homepage?.title || host,
+      website: crawl.websiteUrl,
+      description: homepage?.description || homepage?.content.slice(0, 280) || null,
+      industry: null,
+      address: null,
+      phone: crawl.phones[0] || null,
+      email: crawl.emails[0] || null,
+      owner: null,
+      foundedYear: null,
+    },
+    services: [],
+    technologies: crawl.technologies.map((t) => ({
+      name: t.name,
+      category: t.category,
+      evidence: t.evidence,
+      sourceUrl: t.sourceUrl,
+      confidence: t.confidence,
+    })),
+    serviceTechnologyMapping: [],
+    team: [],
+    socialMedia: crawl.socialLinks,
+    importantPages: crawl.pages.map((page) => ({
+      title: page.title || page.url,
+      url: page.url,
+      purpose: "Crawled page",
+    })),
+    summary: homepage?.content.slice(0, 500) || `Website crawled: ${crawl.websiteUrl}`,
+    dataQuality: {
+      overallConfidence: 0.35,
+      limitations: ["AI enrichment was skipped or timed out; values below come from the public website crawl."],
+    },
+  };
+}
+
 export async function analyzeCompanyWithGemini(
   crawl: CrawlResult,
   options: { fast?: boolean } = {},
 ): Promise<CompanyAnalysis> {
-  const userPayload = buildUserPrompt(crawl, options.fast ? 2500 : 8000);
+  const userPayload = buildUserPrompt(crawl, options.fast ? 1500 : 5000);
   const prompt = `${SYSTEM_PROMPT}\n\n${OUTPUT_SCHEMA_INSTRUCTIONS}\n\nWebsite research payload:\n${userPayload}`;
-  const models = modelCandidates();
-  const attempts = options.fast ? 1 : 2;
+  const models = options.fast
+    ? [...new Set([normalizeModelName(process.env.GEMINI_MODEL), "gemini-3.5-flash-lite"])]
+    : modelCandidates();
+  const attempts = 1;
 
   let lastQuotaError: unknown;
 
@@ -97,14 +146,10 @@ export async function analyzeCompanyWithGemini(
           contents: [{ role: "user", parts: [{ text: prompt }] }],
         });
         const text = result.response.text();
-        if (!text) {
-          throw new AnalysisError("GEMINI_ERROR", "Gemini returned an empty response.", 502);
-        }
+        if (!text) continue;
         const parsed = extractJson(text);
         const validated = companyAnalysisSchema.safeParse(parsed);
-        if (!validated.success) {
-          continue;
-        }
+        if (!validated.success) continue;
         return mergeDeterministicSignals(validated.data, crawl);
       } catch (error) {
         if (error instanceof AnalysisError && error.code === "CONFIG_ERROR") throw error;
@@ -112,22 +157,16 @@ export async function analyzeCompanyWithGemini(
           lastQuotaError = error;
           break;
         }
-        if (isUnavailableModel(error)) {
-          break;
-        }
+        if (isUnavailableModel(error)) break;
       }
     }
   }
 
-  if (lastQuotaError) {
-    throw new AnalysisError(
-      "RATE_LIMITED",
-      GEMINI_QUOTA_MESSAGE,
-      429,
-    );
+  if (lastQuotaError && !options.fast) {
+    throw new AnalysisError("RATE_LIMITED", GEMINI_QUOTA_MESSAGE, 429);
   }
 
-  throw new AnalysisError("INVALID_GEMINI_RESPONSE", "Gemini could not return a valid analysis for this website.", 502);
+  return analysisFromCrawl(crawl);
 }
 
 function mergeDeterministicSignals(analysis: CompanyAnalysis, crawl: CrawlResult): CompanyAnalysis {

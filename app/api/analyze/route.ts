@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { crawlWebsite } from "@/lib/crawler/website-crawler";
 import { AnalysisError, errorResponse } from "@/lib/errors";
-import { analyzeCompanyWithGemini } from "@/lib/gemini/company-analyzer";
+import { analyzeCompanyWithGemini, analysisFromCrawl } from "@/lib/gemini/company-analyzer";
 import { rateLimit } from "@/lib/security/rate-limit";
 import { normalizeWebsiteUrl } from "@/lib/security/url-validator";
 
@@ -50,19 +50,26 @@ export async function POST(request: NextRequest) {
       maxPages: fast ? 1 : 4,
       fetchTimeoutMs: fast ? 5_000 : 8_000,
       maxRetries: 0,
-      deadlineAt: started + (fast ? 12_000 : 22_000),
+      deadlineAt: started + (fast ? 10_000 : 20_000),
     });
 
-    const remaining = 40_000 - (Date.now() - started);
-    if (remaining < 4_000) {
-      throw new AnalysisError("TIMEOUT", "This website took too long to analyze.", 504);
+    const remaining = 55_000 - (Date.now() - started);
+    let data;
+    if (remaining < 6_000) {
+      data = analysisFromCrawl(crawl);
+    } else {
+      try {
+        data = await withTimeout(
+          analyzeCompanyWithGemini(crawl, { fast }),
+          remaining,
+          "Gemini analysis timed out for this website.",
+        );
+      } catch (error) {
+        if (error instanceof AnalysisError && error.code === "CONFIG_ERROR") throw error;
+        if (error instanceof AnalysisError && error.code === "RATE_LIMITED" && !fast) throw error;
+        data = analysisFromCrawl(crawl);
+      }
     }
-
-    const data = await withTimeout(
-      analyzeCompanyWithGemini(crawl, { fast }),
-      remaining,
-      "Gemini analysis timed out for this website.",
-    );
 
     return NextResponse.json({
       success: true,
