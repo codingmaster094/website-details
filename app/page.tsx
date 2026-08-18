@@ -58,13 +58,13 @@ export default function HomePage() {
         signal: AbortSignal.timeout(55_000),
       });
       const payload = await readAnalyzePayload<CompanyAnalysis>(response);
-      if (!payload.success || !payload.data) {
+      if (!payload.success) {
         if (isCrawlerDenied(payload.error)) {
           setDenied(true);
           setStep("Completed");
           return;
         }
-        throw new Error(payload.error?.message || "Analysis failed.");
+        throw new Error(payload.error.message || "Analysis failed.");
       }
       setStep("Completed");
       setAnalysis(payload.data);

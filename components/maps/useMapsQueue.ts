@@ -79,7 +79,7 @@ export function useMapsQueue() {
         throw new Error(friendlyClientError(err));
       });
       const analyzePayload = await readAnalyzePayload<CompanyAnalysis>(analyzeRes);
-      if (!analyzePayload.success || !analyzePayload.data) {
+      if (!analyzePayload.success) {
         if (isCrawlerDenied(analyzePayload.error)) {
           deniedCache.current.add(key);
           updateCompany(company.id, {
@@ -91,7 +91,7 @@ export function useMapsQueue() {
           });
           return;
         }
-        throw new Error(analyzePayload.error?.message || "Website analysis failed.");
+        throw new Error(analyzePayload.error.message || "Website analysis failed.");
       }
       resultCache.current.set(key, analyzePayload.data);
       updateCompany(company.id, {
