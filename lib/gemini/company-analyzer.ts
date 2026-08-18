@@ -1,11 +1,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { AnalysisError } from "@/lib/errors";
+import { AnalysisError, GEMINI_QUOTA_MESSAGE } from "@/lib/errors";
 import type { CrawlResult } from "@/lib/crawler/website-crawler";
 import { OUTPUT_SCHEMA_INSTRUCTIONS, SYSTEM_PROMPT } from "@/lib/gemini/prompts";
 import { companyAnalysisSchema, type CompanyAnalysis } from "@/lib/validation/company-schema";
 
 const DEFAULT_MODEL = "gemini-3.6-flash";
-const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite"];
+const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"];
 
 function getApiKey() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -84,7 +84,7 @@ export async function analyzeCompanyWithGemini(
 ): Promise<CompanyAnalysis> {
   const userPayload = buildUserPrompt(crawl, options.fast ? 2500 : 8000);
   const prompt = `${SYSTEM_PROMPT}\n\n${OUTPUT_SCHEMA_INSTRUCTIONS}\n\nWebsite research payload:\n${userPayload}`;
-  const models = options.fast ? [normalizeModelName(process.env.GEMINI_MODEL)] : modelCandidates();
+  const models = modelCandidates();
   const attempts = options.fast ? 1 : 2;
 
   let lastQuotaError: unknown;
@@ -122,7 +122,7 @@ export async function analyzeCompanyWithGemini(
   if (lastQuotaError) {
     throw new AnalysisError(
       "RATE_LIMITED",
-      "Gemini quota is exhausted. Wait for the daily reset, or enable billing in Google AI Studio.",
+      GEMINI_QUOTA_MESSAGE,
       429,
     );
   }

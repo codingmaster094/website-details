@@ -21,7 +21,14 @@ export class AnalysisError extends Error {
   }
 }
 
-export const CRAWLER_DENIED_MESSAGE = "The website denied access to this crawler.";
+export const GEMINI_QUOTA_MESSAGE =
+  "Gemini quota is exhausted. Wait for the daily reset, or enable billing in Google AI Studio.";
+
+export function isGeminiQuotaError(error?: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "RATE_LIMITED") return true;
+  return /quota is exhausted|429|Too Many Requests/i.test(error.message || "");
+}
 
 export function isCrawlerDenied(error?: { code?: string; message?: string } | null): boolean {
   if (!error) return false;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CRAWLER_DENIED_MESSAGE, isCrawlerDenied } from "@/lib/errors";
+import { CRAWLER_DENIED_MESSAGE, isCrawlerDenied, isGeminiQuotaError } from "@/lib/errors";
 import { friendlyClientError, readAnalyzePayload } from "@/lib/client/read-analyze-payload";
 import type { CompanyAnalysis } from "@/lib/validation/company-schema";
 import { normalizeWebsiteKey } from "@/lib/maps/website";
@@ -91,7 +91,9 @@ export function useMapsQueue() {
           });
           return;
         }
-        throw new Error(analyzePayload.error.message || "Website analysis failed.");
+        if (isGeminiQuotaError(analyzePayload.error)) {
+          throw Object.assign(new Error(analyzePayload.error.message), { code: "RATE_LIMITED" });
+        }
       }
       resultCache.current.set(key, analyzePayload.data);
       updateCompany(company.id, {
@@ -117,11 +119,33 @@ export function useMapsQueue() {
           await processOne(next);
         } catch (err) {
           const message = friendlyClientError(err);
+          const quotaHit = isGeminiQuotaError({
+            code: typeof err === "object" && err && "code" in err ? String((err as { code?: string }).code) : undefined,
+            message,
+          });
           updateCompany(next.id, {
             status: isCrawlerDenied({ message }) ? "access_denied" : "failed",
             error: isCrawlerDenied({ message }) ? CRAWLER_DENIED_MESSAGE : message,
             progress: 100,
           });
+          if (quotaHit) {
+            setCompanies((prev) => {
+              const updated = prev.map((item) =>
+                item.status === "pending" || item.status === "website_found"
+                  ? {
+                      ...item,
+                      status: "failed" as const,
+                      error: message,
+                      progress: 100,
+                    }
+                  : item,
+              );
+              companiesRef.current = updated;
+              return updated;
+            });
+            pauseRef.current = true;
+            break;
+          }
         }
       }
     } finally {
