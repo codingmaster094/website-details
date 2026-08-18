@@ -4,13 +4,29 @@ import type { CrawlResult } from "@/lib/crawler/website-crawler";
 import { OUTPUT_SCHEMA_INSTRUCTIONS, SYSTEM_PROMPT } from "@/lib/gemini/prompts";
 import { companyAnalysisSchema, type CompanyAnalysis } from "@/lib/validation/company-schema";
 
-function getModel() {
+const DEFAULT_MODEL = "gemini-3.6-flash";
+const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"];
+
+function getApiKey() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new AnalysisError("CONFIG_ERROR", "GEMINI_API_KEY is not configured on the server.", 500);
   }
-  const modelName = process.env.GEMINI_MODEL || "gemini-3.6-flash";
-  const genAI = new GoogleGenerativeAI(apiKey);
+  return apiKey;
+}
+
+function normalizeModelName(value?: string | null) {
+  const name = value?.trim().replace(/^["']|["']$/g, "");
+  if (!name || name === "gemini-2.5-flash") return DEFAULT_MODEL;
+  return name;
+}
+
+function modelCandidates() {
+  return [...new Set([normalizeModelName(process.env.GEMINI_MODEL), ...FALLBACK_MODELS])];
+}
+
+function getModel(modelName: string) {
+  const genAI = new GoogleGenerativeAI(getApiKey());
   return genAI.getGenerativeModel({
     model: modelName,
     generationConfig: {
@@ -18,6 +34,11 @@ function getModel() {
       responseMimeType: "application/json",
     },
   });
+}
+
+function isQuotaError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /429|Too Many Requests|quota|RESOURCE_EXHAUSTED/i.test(message);
 }
 
 function buildUserPrompt(crawl: CrawlResult): string {
@@ -53,31 +74,48 @@ function extractJson(text: string): unknown {
 }
 
 export async function analyzeCompanyWithGemini(crawl: CrawlResult): Promise<CompanyAnalysis> {
-  const model = getModel();
   const userPayload = buildUserPrompt(crawl);
   const prompt = `${SYSTEM_PROMPT}\n\n${OUTPUT_SCHEMA_INSTRUCTIONS}\n\nWebsite research payload:\n${userPayload}`;
+  const models = modelCandidates();
 
   let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-      });
-      const text = result.response.text();
-      if (!text) {
-        throw new AnalysisError("GEMINI_ERROR", "Gemini returned an empty response.", 502);
+  let lastQuotaError: unknown;
+
+  for (const modelName of models) {
+    const model = getModel(modelName);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const result = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+        });
+        const text = result.response.text();
+        if (!text) {
+          throw new AnalysisError("GEMINI_ERROR", "Gemini returned an empty response.", 502);
+        }
+        const parsed = extractJson(text);
+        const validated = companyAnalysisSchema.safeParse(parsed);
+        if (!validated.success) {
+          lastError = validated.error;
+          continue;
+        }
+        return mergeDeterministicSignals(validated.data, crawl);
+      } catch (error) {
+        lastError = error;
+        if (error instanceof AnalysisError && error.code === "CONFIG_ERROR") throw error;
+        if (isQuotaError(error)) {
+          lastQuotaError = error;
+          break;
+        }
       }
-      const parsed = extractJson(text);
-      const validated = companyAnalysisSchema.safeParse(parsed);
-      if (!validated.success) {
-        lastError = validated.error;
-        continue;
-      }
-      return mergeDeterministicSignals(validated.data, crawl);
-    } catch (error) {
-      lastError = error;
-      if (error instanceof AnalysisError && error.code === "CONFIG_ERROR") throw error;
     }
+  }
+
+  if (lastQuotaError) {
+    throw new AnalysisError(
+      "RATE_LIMITED",
+      "Gemini quota is exhausted. Wait for the daily reset, or enable billing in Google AI Studio.",
+      429,
+    );
   }
 
   throw new AnalysisError(
