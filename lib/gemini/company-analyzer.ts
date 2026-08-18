@@ -41,13 +41,13 @@ function isQuotaError(error: unknown) {
   return /429|Too Many Requests|quota|RESOURCE_EXHAUSTED/i.test(message);
 }
 
-function buildUserPrompt(crawl: CrawlResult): string {
+function buildUserPrompt(crawl: CrawlResult, contentLimit: number): string {
   const pages = crawl.pages.map((page) => ({
     url: page.url,
     title: page.title,
     description: page.description,
     headings: page.headings,
-    content: page.content.slice(0, 8000),
+    content: page.content.slice(0, contentLimit),
     sourceUrl: page.sourceUrl,
   }));
 
@@ -73,17 +73,21 @@ function extractJson(text: string): unknown {
   return JSON.parse(candidate);
 }
 
-export async function analyzeCompanyWithGemini(crawl: CrawlResult): Promise<CompanyAnalysis> {
-  const userPayload = buildUserPrompt(crawl);
+export async function analyzeCompanyWithGemini(
+  crawl: CrawlResult,
+  options: { fast?: boolean } = {},
+): Promise<CompanyAnalysis> {
+  const userPayload = buildUserPrompt(crawl, options.fast ? 2500 : 8000);
   const prompt = `${SYSTEM_PROMPT}\n\n${OUTPUT_SCHEMA_INSTRUCTIONS}\n\nWebsite research payload:\n${userPayload}`;
-  const models = modelCandidates();
+  const models = options.fast ? [normalizeModelName(process.env.GEMINI_MODEL)] : modelCandidates();
+  const attempts = options.fast ? 1 : 2;
 
   let lastError: unknown;
   let lastQuotaError: unknown;
 
   for (const modelName of models) {
     const model = getModel(modelName);
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         const result = await model.generateContent({
           contents: [{ role: "user", parts: [{ text: prompt }] }],

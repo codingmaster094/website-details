@@ -32,10 +32,15 @@ function envNumber(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-async function fetchWithLimits(url: string, origin: URL, redirectCount = 0): Promise<FetchOk> {
-  const timeoutMs = envNumber("FETCH_TIMEOUT_MS", 15000);
-  const maxBytes = envNumber("MAX_RESPONSE_BYTES", 1_500_000);
-  const maxRetries = envNumber("MAX_RETRIES", 2);
+async function fetchWithLimits(
+  url: string,
+  origin: URL,
+  options: { timeoutMs: number; maxBytes: number; maxRetries: number },
+  redirectCount = 0,
+): Promise<FetchOk> {
+  const timeoutMs = options.timeoutMs;
+  const maxBytes = options.maxBytes;
+  const maxRetries = options.maxRetries;
 
   let lastError: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
@@ -67,7 +72,7 @@ async function fetchWithLimits(url: string, origin: URL, redirectCount = 0): Pro
         }
         await assertSafePublicUrl(redirected.toString());
         clearTimeout(timer);
-        return fetchWithLimits(redirected.toString(), origin, redirectCount + 1);
+        return fetchWithLimits(redirected.toString(), origin, options, redirectCount + 1);
       }
 
       if (response.status === 401 || response.status === 403) {
@@ -130,11 +135,20 @@ async function fetchWithLimits(url: string, origin: URL, redirectCount = 0): Pro
     : new AnalysisError("WEBSITE_UNAVAILABLE", "Could not fetch the website.", 502);
 }
 
-export async function crawlWebsite(
-  inputUrl: string,
-  onProgress?: (step: string) => void,
-): Promise<CrawlResult> {
-  const maxPages = envNumber("MAX_PAGES", 10);
+export type CrawlOptions = {
+  maxPages?: number;
+  fetchTimeoutMs?: number;
+  maxRetries?: number;
+  deadlineAt?: number;
+  onProgress?: (step: string) => void;
+};
+
+export async function crawlWebsite(inputUrl: string, options: CrawlOptions = {}): Promise<CrawlResult> {
+  const maxPages = options.maxPages ?? envNumber("MAX_PAGES", 10);
+  const fetchTimeoutMs = options.fetchTimeoutMs ?? envNumber("FETCH_TIMEOUT_MS", 15000);
+  const maxRetries = options.maxRetries ?? envNumber("MAX_RETRIES", 2);
+  const maxBytes = envNumber("MAX_RESPONSE_BYTES", 1_500_000);
+  const fetchOptions = { timeoutMs: fetchTimeoutMs, maxBytes, maxRetries };
   const websiteUrl = normalizeWebsiteUrl(inputUrl);
   const origin = await assertSafePublicUrl(websiteUrl);
   const warnings: string[] = [];
@@ -142,8 +156,8 @@ export async function crawlWebsite(
   const pages: ExtractedPage[] = [];
   const techGroups: DetectedTechnology[][] = [];
 
-  onProgress?.("Fetching website");
-  const homepage = await fetchWithLimits(origin.toString(), origin);
+  options.onProgress?.("Fetching website");
+  const homepage = await fetchWithLimits(origin.toString(), origin, fetchOptions);
   const homepageCanonical = canonicalizeUrl(homepage.url);
   visited.add(homepageCanonical);
 
@@ -152,7 +166,7 @@ export async function crawlWebsite(
   pages.push(homepageExtracted);
   techGroups.push(detectTechnologies({ html: homepage.html, headers: homepage.headers, sourceUrl: homepageCanonical }));
 
-  onProgress?.("Finding relevant pages");
+  options.onProgress?.("Finding relevant pages");
   const ranked = rankInternalLinks(
     homepageLinks.filter((link) => !visited.has(canonicalizeUrl(link))),
     origin,
@@ -160,11 +174,15 @@ export async function crawlWebsite(
 
   for (const link of ranked) {
     if (pages.length >= maxPages) break;
+    if (options.deadlineAt && Date.now() >= options.deadlineAt) {
+      warnings.push("Stopped extra page crawls to stay within the time limit.");
+      break;
+    }
     const canonical = canonicalizeUrl(link);
     if (visited.has(canonical)) continue;
     visited.add(canonical);
     try {
-      const fetched = await fetchWithLimits(canonical, origin);
+      const fetched = await fetchWithLimits(canonical, origin, fetchOptions);
       const fetchedCanonical = canonicalizeUrl(fetched.url);
       if (visited.has(fetchedCanonical) && fetchedCanonical !== canonical) continue;
       visited.add(fetchedCanonical);

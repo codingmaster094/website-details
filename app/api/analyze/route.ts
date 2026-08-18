@@ -8,6 +8,24 @@ import { normalizeWebsiteUrl } from "@/lib/security/url-validator";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new AnalysisError("TIMEOUT", message, 504));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anonymous";
   const limit = rateLimit(ip);
@@ -24,10 +42,27 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     const url = typeof body?.url === "string" ? body.url : "";
+    const fast = body?.fast === true;
     normalizeWebsiteUrl(url);
 
-    const crawl = await crawlWebsite(url);
-    const data = await analyzeCompanyWithGemini(crawl);
+    const started = Date.now();
+    const crawl = await crawlWebsite(url, {
+      maxPages: fast ? 3 : undefined,
+      fetchTimeoutMs: fast ? 6_000 : undefined,
+      maxRetries: fast ? 0 : undefined,
+      deadlineAt: started + (fast ? 18_000 : 28_000),
+    });
+
+    const remaining = 50_000 - (Date.now() - started);
+    if (remaining < 4_000) {
+      throw new AnalysisError("TIMEOUT", "This website took too long to analyze.", 504);
+    }
+
+    const data = await withTimeout(
+      analyzeCompanyWithGemini(crawl, { fast }),
+      remaining,
+      "Gemini analysis timed out for this website.",
+    );
 
     return NextResponse.json({
       success: true,

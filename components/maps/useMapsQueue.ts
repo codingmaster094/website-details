@@ -78,9 +78,25 @@ export function useMapsQueue() {
       const analyzeRes = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: websiteUrl }),
+        body: JSON.stringify({ url: websiteUrl, fast: true }),
+        signal: AbortSignal.timeout(52_000),
+      }).catch((err: unknown) => {
+        if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+          throw new Error("This website took too long to analyze. Skipped so the list can continue.");
+        }
+        throw err;
       });
-      const analyzePayload = (await analyzeRes.json()) as AnalyzeResponse;
+      const raw = await analyzeRes.text();
+      let analyzePayload: AnalyzeResponse;
+      try {
+        analyzePayload = JSON.parse(raw) as AnalyzeResponse;
+      } catch {
+        throw new Error(
+          /FUNCTION_INVOCATION_TIMEOUT|timeout/i.test(raw)
+            ? "This website took too long to analyze. Skipped so the list can continue."
+            : "Server returned an invalid response. Skipped this website.",
+        );
+      }
       if (!analyzePayload.success || !analyzePayload.data) {
         if (isCrawlerDenied(analyzePayload.error)) {
           deniedCache.current.add(key);
