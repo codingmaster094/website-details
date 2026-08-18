@@ -94,6 +94,7 @@ export function useMapsQueue() {
         if (isGeminiQuotaError(analyzePayload.error)) {
           throw Object.assign(new Error(analyzePayload.error.message), { code: "RATE_LIMITED" });
         }
+        throw new Error(analyzePayload.error.message || "Website analysis failed.");
       }
       resultCache.current.set(key, analyzePayload.data);
       updateCompany(company.id, {
