@@ -21,6 +21,8 @@ export class AnalysisError extends Error {
   }
 }
 
+export const CRAWLER_DENIED_MESSAGE = "The website denied access to this crawler.";
+
 export const GEMINI_QUOTA_MESSAGE =
   "Gemini quota is exhausted. Wait for the daily reset, or enable billing in Google AI Studio.";
 
