@@ -72,7 +72,7 @@ export async function lookupPublicCompanyFacts(
     try {
       const model = genAI.getGenerativeModel({
         model: modelName,
-        tools: [{ googleSearch: {} }] as [{ googleSearch: Record<string, never> }],
+        tools: [{ googleSearchRetrieval: {} }] as never,
         generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
       });
       const result = await model.generateContent(prompt);
