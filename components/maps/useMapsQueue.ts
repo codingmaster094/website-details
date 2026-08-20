@@ -73,8 +73,8 @@ export function useMapsQueue() {
       const analyzeRes = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: websiteUrl, fast: true }),
-        signal: AbortSignal.timeout(45_000),
+        body: JSON.stringify({ url: websiteUrl }),
+        signal: AbortSignal.timeout(55_000),
       }).catch((err: unknown) => {
         throw new Error(friendlyClientError(err));
       });
@@ -198,7 +198,7 @@ export function useMapsQueue() {
       }
 
       setQuery("Website list");
-      setNote("URLs are analyzed one by one with the existing website analyzer.");
+      setNote("Each URL is analyzed the same way as Single Website.");
       setCompanies(mapped);
       companiesRef.current = mapped;
       pauseRef.current = false;
@@ -233,6 +233,10 @@ export function useMapsQueue() {
   const retryOne = useCallback(
     (id: string) => {
       setCompanies((prev) => {
+        const target = prev.find((item) => item.id === id);
+        if (target?.websiteUrl) {
+          resultCache.current.delete(normalizeWebsiteKey(target.websiteUrl));
+        }
         const next = prev.map((item) =>
           item.id === id ? { ...item, status: "pending" as const, error: undefined, progress: 0, result: undefined } : item,
         );
@@ -250,6 +254,11 @@ export function useMapsQueue() {
 
   const retryFailed = useCallback(() => {
     setCompanies((prev) => {
+      for (const item of prev) {
+        if (item.status === "failed" && item.websiteUrl) {
+          resultCache.current.delete(normalizeWebsiteKey(item.websiteUrl));
+        }
+      }
       const next = prev.map((item) =>
         item.status === "failed" ? { ...item, status: "pending" as const, error: undefined, progress: 0 } : item,
       );

@@ -42,32 +42,30 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     const url = typeof body?.url === "string" ? body.url : "";
-    const fast = body?.fast === true;
     normalizeWebsiteUrl(url);
 
     const started = Date.now();
-    const totalBudgetMs = fast ? 28_000 : 50_000;
     const crawl = await crawlWebsite(url, {
-      maxPages: fast ? 3 : 5,
-      fetchTimeoutMs: fast ? 4_000 : 8_000,
+      maxPages: 5,
+      fetchTimeoutMs: 8_000,
       maxRetries: 0,
-      deadlineAt: started + (fast ? 7_000 : 16_000),
+      deadlineAt: started + 16_000,
     });
 
-    const remaining = totalBudgetMs - (Date.now() - started);
+    const remaining = 50_000 - (Date.now() - started);
     let data;
     if (remaining < 4_000) {
       data = analysisFromCrawl(crawl);
     } else {
       try {
         data = await withTimeout(
-          analyzeCompanyWithGemini(crawl, { fast }),
+          analyzeCompanyWithGemini(crawl),
           remaining,
           "Gemini analysis timed out for this website.",
         );
       } catch (error) {
         if (error instanceof AnalysisError && error.code === "CONFIG_ERROR") throw error;
-        if (error instanceof AnalysisError && error.code === "RATE_LIMITED" && !fast) throw error;
+        if (error instanceof AnalysisError && error.code === "RATE_LIMITED") throw error;
         data = analysisFromCrawl(crawl);
       }
     }

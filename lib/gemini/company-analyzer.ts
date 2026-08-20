@@ -136,13 +136,10 @@ export function analysisFromCrawl(crawl: CrawlResult): CompanyAnalysis {
 
 export async function analyzeCompanyWithGemini(
   crawl: CrawlResult,
-  options: { fast?: boolean } = {},
 ): Promise<CompanyAnalysis> {
-  const userPayload = buildUserPrompt(crawl, options.fast ? 2500 : 6000);
+  const userPayload = buildUserPrompt(crawl, 6000);
   const prompt = `${SYSTEM_PROMPT}\n\n${OUTPUT_SCHEMA_INSTRUCTIONS}\n\nWebsite research payload:\n${userPayload}`;
-  const models = options.fast
-    ? [...new Set([normalizeModelName(process.env.GEMINI_MODEL), "gemini-3.5-flash-lite"])]
-    : modelCandidates();
+  const models = modelCandidates();
   const attempts = 1;
 
   let lastQuotaError: unknown;
@@ -171,7 +168,7 @@ export async function analyzeCompanyWithGemini(
     }
   }
 
-  if (lastQuotaError && !options.fast) {
+  if (lastQuotaError) {
     throw new AnalysisError("RATE_LIMITED", GEMINI_QUOTA_MESSAGE, 429);
   }
 
