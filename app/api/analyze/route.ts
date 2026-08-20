@@ -46,16 +46,17 @@ export async function POST(request: NextRequest) {
     normalizeWebsiteUrl(url);
 
     const started = Date.now();
+    const totalBudgetMs = fast ? 28_000 : 50_000;
     const crawl = await crawlWebsite(url, {
-      maxPages: fast ? 1 : 4,
-      fetchTimeoutMs: fast ? 5_000 : 8_000,
+      maxPages: fast ? 3 : 5,
+      fetchTimeoutMs: fast ? 4_000 : 8_000,
       maxRetries: 0,
-      deadlineAt: started + (fast ? 10_000 : 20_000),
+      deadlineAt: started + (fast ? 7_000 : 16_000),
     });
 
-    const remaining = 55_000 - (Date.now() - started);
+    const remaining = totalBudgetMs - (Date.now() - started);
     let data;
-    if (remaining < 6_000) {
+    if (remaining < 4_000) {
       data = analysisFromCrawl(crawl);
     } else {
       try {

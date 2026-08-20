@@ -1,17 +1,38 @@
 import * as cheerio from "cheerio";
 import { canonicalizeUrl, isSameRegistrableDomain } from "@/lib/security/url-validator";
 
-const PRIORITY_PATHS = [
+const CONTACT_PATHS = [
+  "/contact",
+  "/contact-us",
+  "/contactus",
+  "/get-in-touch",
+  "/getintouch",
+  "/reach-us",
+  "/enquiry",
+  "/inquiry",
+  "/connect",
+];
+
+const ABOUT_OWNER_PATHS = [
   "/about",
   "/about-us",
+  "/who-we-are",
+  "/our-story",
+  "/team",
+  "/our-team",
+  "/leadership",
+  "/founder",
+  "/founders",
   "/company",
+];
+
+const PRIORITY_PATHS = [
+  ...CONTACT_PATHS,
+  ...ABOUT_OWNER_PATHS,
   "/services",
   "/solutions",
   "/expertise",
   "/industries",
-  "/contact",
-  "/team",
-  "/our-team",
   "/technology",
   "/portfolio",
   "/work",
@@ -45,12 +66,18 @@ export function extractLinks(html: string, pageUrl: string, origin: URL): string
 export function rankInternalLinks(links: string[], homepage: URL): string[] {
   const scored = links.map((link) => {
     const parsed = new URL(link);
-    const path = parsed.pathname.toLowerCase();
+    const path = parsed.pathname.toLowerCase().replace(/\/+$/, "") || "/";
     let score = 0;
-    for (const priority of PRIORITY_PATHS) {
-      if (path === priority || path.startsWith(`${priority}/`)) {
-        score += 100;
-        break;
+    if (CONTACT_PATHS.some((item) => path === item || path.startsWith(`${item}/`) || path.includes("contact"))) {
+      score += 400;
+    } else if (ABOUT_OWNER_PATHS.some((item) => path === item || path.startsWith(`${item}/`))) {
+      score += 300;
+    } else {
+      for (const priority of PRIORITY_PATHS) {
+        if (path === priority || path.startsWith(`${priority}/`)) {
+          score += 80;
+          break;
+        }
       }
     }
     if (path.split("/").filter(Boolean).length <= 2) score += 5;
@@ -61,6 +88,19 @@ export function rankInternalLinks(links: string[], homepage: URL): string[] {
   return scored
     .sort((a, b) => b.score - a.score)
     .map((item) => item.link);
+}
+
+export function forcedContactUrls(origin: URL, discovered: string[]): string[] {
+  const fromSite = discovered.filter((link) => {
+    try {
+      const path = new URL(link).pathname.toLowerCase();
+      return /contact|get-in-touch|getintouch|reach-us|enquiry|inquiry/.test(path);
+    } catch {
+      return false;
+    }
+  });
+  if (fromSite.length > 0) return [...new Set(fromSite.slice(0, 1))];
+  return [new URL("/contact", origin).toString()];
 }
 
 export function toAbsoluteUrl(href: string, base: string): string | null {
@@ -75,4 +115,4 @@ export function toAbsoluteUrl(href: string, base: string): string | null {
   }
 }
 
-export { PRIORITY_PATHS };
+export { PRIORITY_PATHS, CONTACT_PATHS, ABOUT_OWNER_PATHS };

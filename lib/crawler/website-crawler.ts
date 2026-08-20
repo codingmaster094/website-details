@@ -1,7 +1,8 @@
 import { Buffer } from "node:buffer";
 import { AnalysisError } from "@/lib/errors";
 import { extractPageContent, type ExtractedPage } from "@/lib/crawler/content-extractor";
-import { extractLinks, rankInternalLinks } from "@/lib/crawler/link-discovery";
+import { isContactPageUrl } from "@/lib/crawler/emails";
+import { extractLinks, forcedContactUrls, rankInternalLinks } from "@/lib/crawler/link-discovery";
 import { assertSafePublicUrl } from "@/lib/security/ssrf-protection";
 import { canonicalizeUrl, isSameRegistrableDomain, normalizeWebsiteUrl } from "@/lib/security/url-validator";
 import { detectTechnologies, mergeTechnologies, type DetectedTechnology } from "@/lib/technologies/detector";
@@ -167,24 +168,21 @@ export async function crawlWebsite(inputUrl: string, options: CrawlOptions = {})
   techGroups.push(detectTechnologies({ html: homepage.html, headers: homepage.headers, sourceUrl: homepageCanonical }));
 
   options.onProgress?.("Finding relevant pages");
-  const ranked = rankInternalLinks(
-    homepageLinks.filter((link) => !visited.has(canonicalizeUrl(link))),
-    origin,
-  );
 
-  for (const link of ranked) {
-    if (pages.length >= maxPages) break;
-    if (options.deadlineAt && Date.now() >= options.deadlineAt) {
-      warnings.push("Stopped extra page crawls to stay within the time limit.");
-      break;
-    }
+  async function crawlOne(link: string, extraTimeoutMs?: number) {
+    if (pages.length >= maxPages) return;
+    const remainingMs = options.deadlineAt ? options.deadlineAt - Date.now() : extraTimeoutMs ?? fetchTimeoutMs;
+    if (remainingMs < 800) return;
     const canonical = canonicalizeUrl(link);
-    if (visited.has(canonical)) continue;
+    if (visited.has(canonical)) return;
     visited.add(canonical);
     try {
-      const fetched = await fetchWithLimits(canonical, origin, fetchOptions);
+      const fetched = await fetchWithLimits(canonical, origin, {
+        ...fetchOptions,
+        timeoutMs: Math.min(extraTimeoutMs ?? fetchTimeoutMs, remainingMs),
+      });
       const fetchedCanonical = canonicalizeUrl(fetched.url);
-      if (visited.has(fetchedCanonical) && fetchedCanonical !== canonical) continue;
+      if (visited.has(fetchedCanonical) && fetchedCanonical !== canonical) return;
       visited.add(fetchedCanonical);
       const links = extractLinks(fetched.html, fetchedCanonical, origin);
       pages.push(extractPageContent(fetched.html, fetchedCanonical, links));
@@ -194,12 +192,24 @@ export async function crawlWebsite(inputUrl: string, options: CrawlOptions = {})
     }
   }
 
+  const contactTargets = forcedContactUrls(origin, homepageLinks);
+  const ranked = rankInternalLinks(
+    homepageLinks.filter((link) => !visited.has(canonicalizeUrl(link))),
+    origin,
+  );
+  const extras = [...new Set([...contactTargets, ...ranked])].slice(0, Math.max(0, maxPages - 1));
+  const extraTimeout = Math.min(2_500, fetchTimeoutMs);
+  await Promise.all(extras.map((link) => crawlOne(link, extraTimeout)));
+
   const readable = pages.filter((page) => page.content.trim().length > 40);
   if (readable.length === 0) {
     throw new AnalysisError("NO_CONTENT", "Website has no readable content.");
   }
 
-  const emails = unique(pages.flatMap((p) => p.emails));
+  const emails = unique([
+    ...pages.filter((page) => isContactPageUrl(page.url)).flatMap((page) => page.emails),
+    ...pages.flatMap((page) => page.emails),
+  ]);
   const phones = unique(pages.flatMap((p) => p.phones));
   const socialLinks = uniqueObjects(pages.flatMap((p) => p.socialLinks), (s) => s.url);
   const jsonLd = pages.flatMap((p) => p.jsonLd);

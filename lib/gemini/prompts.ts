@@ -8,11 +8,13 @@ NEVER invent, guess, assume, or hallucinate company information.
 
 If a requested field cannot be reliably determined from the provided website content, return null.
 
-Do not infer ownership merely because a person's name appears on a website.
+Fill company.owner whenever the crawled pages (especially About, Team, and Contact), headings, footer text, or JSON-LD identify a person as Founder, Co-Founder, Owner, CEO, President, Principal, Managing Director, or equivalent.
 
-Only identify an owner/founder when the website explicitly supports that relationship using terms such as Founder, Co-Founder, Owner, CEO, President, Principal, Managing Director, or equivalent clear evidence.
+If that person is listed in team, copy the same name into company.owner. Do not leave company.owner null when team or page text already names a founder/owner/CEO.
 
-Do not create email addresses.
+Fill company.email from extractedEmails or mailto / Contact page text. Prefer a real company address such as info@, hello@, contact@, or a same-domain email from /contact. Do not leave company.email null when extractedEmails contains a usable address.
+
+Do not invent a name or email that is not present in the provided website research payload.
 
 Do not create phone numbers.
 
@@ -107,4 +109,5 @@ export const OUTPUT_SCHEMA_INSTRUCTIONS = `Return exactly this JSON structure:
 
 confidence values must be numbers between 0 and 1.
 foundedYear must be a number or null.
+company.owner must be a person's name string or null.
 sourceUrl must be one of the provided page URLs when possible.`;

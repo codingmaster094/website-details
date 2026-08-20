@@ -3,6 +3,7 @@ import { CRAWLER_DENIED_MESSAGE } from "@/lib/errors";
 
 export type DetailRow = {
   companyName: string;
+  owner: string | null;
   email: string | null;
   phone: string | null;
   services: string;
@@ -32,6 +33,7 @@ function technologyList(analysis: CompanyAnalysis): string {
 export function analysisToDetailRow(analysis: CompanyAnalysis): DetailRow {
   return {
     companyName: analysis.company.name || "—",
+    owner: analysis.company.owner,
     email: analysis.company.email,
     phone: analysis.company.phone,
     services: serviceList(analysis),
@@ -42,6 +44,7 @@ export function analysisToDetailRow(analysis: CompanyAnalysis): DetailRow {
 export function deniedDetailRow(companyName: string): DetailRow {
   return {
     companyName,
+    owner: null,
     email: null,
     phone: null,
     services: CRAWLER_DENIED_MESSAGE,
@@ -61,6 +64,7 @@ export function CompanyOverview({ rows }: { rows: DetailRow[] }) {
             <thead>
               <tr className="bg-[#172238] text-[#9aa8c7]">
                 <th className="border border-[#2a3a57] px-3 py-2 font-medium">Company Name</th>
+                <th className="border border-[#2a3a57] px-3 py-2 font-medium">Owner Name</th>
                 <th className="border border-[#2a3a57] px-3 py-2 font-medium">Company Email</th>
                 <th className="border border-[#2a3a57] px-3 py-2 font-medium">Company Phone</th>
                 <th className="border border-[#2a3a57] px-3 py-2 font-medium">Services</th>
@@ -71,6 +75,7 @@ export function CompanyOverview({ rows }: { rows: DetailRow[] }) {
               {rows.map((row, index) => (
                 <tr key={`${row.companyName}-${index}`} className="align-top">
                   <td className="border border-[#2a3a57] px-3 py-3 font-medium">{dash(row.companyName)}</td>
+                  <td className="border border-[#2a3a57] px-3 py-3">{dash(row.owner)}</td>
                   <td className="border border-[#2a3a57] px-3 py-3">{dash(row.email)}</td>
                   <td className="border border-[#2a3a57] px-3 py-3">{dash(row.phone)}</td>
                   <td className="border border-[#2a3a57] px-3 py-3 text-[#c9d4ee]">{row.services}</td>

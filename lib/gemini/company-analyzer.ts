@@ -1,6 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { AnalysisError, GEMINI_QUOTA_MESSAGE } from "@/lib/errors";
 import type { CrawlResult } from "@/lib/crawler/website-crawler";
+import { ownerFromJsonLd, ownerFromPageText, resolveOwner } from "@/lib/analysis/owner";
+import { isContactPageUrl, pickCompanyEmail } from "@/lib/crawler/emails";
 import { OUTPUT_SCHEMA_INSTRUCTIONS, SYSTEM_PROMPT } from "@/lib/gemini/prompts";
 import { companyAnalysisSchema, type CompanyAnalysis } from "@/lib/validation/company-schema";
 
@@ -48,14 +50,17 @@ function isUnavailableModel(error: unknown) {
 }
 
 function buildUserPrompt(crawl: CrawlResult, contentLimit: number): string {
-  const pages = crawl.pages.map((page) => ({
-    url: page.url,
-    title: page.title,
-    description: page.description,
-    headings: page.headings,
-    content: page.content.slice(0, contentLimit),
-    sourceUrl: page.sourceUrl,
-  }));
+  const pages = [...crawl.pages]
+    .sort((a, b) => Number(isContactPageUrl(b.url)) - Number(isContactPageUrl(a.url)))
+    .map((page) => ({
+      url: page.url,
+      title: page.title,
+      description: page.description,
+      headings: page.headings,
+      emails: page.emails,
+      content: page.content.slice(0, contentLimit),
+      sourceUrl: page.sourceUrl,
+    }));
 
   return JSON.stringify(
     {
@@ -97,8 +102,12 @@ export function analysisFromCrawl(crawl: CrawlResult): CompanyAnalysis {
       industry: null,
       address: null,
       phone: crawl.phones[0] || null,
-      email: crawl.emails[0] || null,
-      owner: null,
+      email: pickCompanyEmail(
+        crawl.emails,
+        crawl.websiteUrl,
+        crawl.pages.filter((page) => isContactPageUrl(page.url)).flatMap((page) => page.emails),
+      ),
+      owner: ownerFromJsonLd(crawl.jsonLd) || ownerFromPageText(crawl.pages.map((page) => page.content).join("\n")),
       foundedYear: null,
     },
     services: [],
@@ -129,7 +138,7 @@ export async function analyzeCompanyWithGemini(
   crawl: CrawlResult,
   options: { fast?: boolean } = {},
 ): Promise<CompanyAnalysis> {
-  const userPayload = buildUserPrompt(crawl, options.fast ? 1500 : 5000);
+  const userPayload = buildUserPrompt(crawl, options.fast ? 2500 : 6000);
   const prompt = `${SYSTEM_PROMPT}\n\n${OUTPUT_SCHEMA_INSTRUCTIONS}\n\nWebsite research payload:\n${userPayload}`;
   const models = options.fast
     ? [...new Set([normalizeModelName(process.env.GEMINI_MODEL), "gemini-3.5-flash-lite"])]
@@ -174,8 +183,13 @@ function mergeDeterministicSignals(analysis: CompanyAnalysis, crawl: CrawlResult
   const company = {
     ...analysis.company,
     website: analysis.company.website || crawl.websiteUrl,
-    email: analysis.company.email || crawl.emails[0] || null,
+    email: pickCompanyEmail(
+      [...(analysis.company.email ? [analysis.company.email] : []), ...crawl.emails],
+      crawl.websiteUrl,
+      crawl.pages.filter((page) => isContactPageUrl(page.url)).flatMap((page) => page.emails),
+    ),
     phone: analysis.company.phone || crawl.phones[0] || null,
+    owner: resolveOwner(analysis, crawl.jsonLd, crawl.pages.map((page) => `${page.title}\n${page.headings.join(" ")}\n${page.content}`).join("\n")),
   };
 
   const techNames = new Set(analysis.technologies.map((t) => t.name.toLowerCase()));

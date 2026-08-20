@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
+import { decodeCfEmail, deobfuscateEmails, matchEmails } from "@/lib/crawler/emails";
 
-const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 const PHONE_RE = /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?)?\d{3,4}[\s.-]?\d{3,4}/g;
 const SOCIAL_HOSTS: Record<string, string> = {
   "facebook.com": "Facebook",
@@ -15,6 +15,9 @@ const SOCIAL_HOSTS: Record<string, string> = {
   "github.com": "GitHub",
   "pinterest.com": "Pinterest",
 };
+
+const OWNERSHIP_HINT =
+  /\b(owner|co-?owner|founder|co-?founder|ceo|chief executive|president|principal|managing director|proprietor)\b/i;
 
 const NOISE_SELECTORS = [
   "script",
@@ -74,23 +77,26 @@ export function extractPageContent(html: string, pageUrl: string, discoveredLink
     }
   });
 
-  $(NOISE_SELECTORS).remove();
-
-  const paragraphs = $("p, li, h1, h2, h3, h4, article, main")
+  const ownershipSnippets = $("header, footer, [class*='footer' i], [id*='footer' i], [class*='about' i], [class*='team' i], p, li, h1, h2, h3, h4")
     .map((_, el) => $(el).text().replace(/\s+/g, " ").trim())
     .get()
-    .filter((text) => text.length > 2);
+    .filter((text) => text.length > 8 && text.length < 400 && OWNERSHIP_HINT.test(text))
+    .slice(0, 12);
 
-  const uniqueParagraphs = [...new Set(paragraphs)].slice(0, 250);
-  const content = uniqueParagraphs.join("\n").slice(0, 20000);
-
-  const combinedText = `${html}\n${content}`;
-  const emails = unique(matchAll(combinedText, EMAIL_RE).filter((email) => !email.endsWith(".png") && !email.includes("example.com") && !email.endsWith(".js")));
-  const phones = unique(
-    matchAll(combinedText, PHONE_RE)
-      .map((phone) => phone.trim())
-      .filter((phone) => phone.replace(/\D/g, "").length >= 8 && phone.replace(/\D/g, "").length <= 15),
-  ).slice(0, 20);
+  const mailtoEmails: string[] = [];
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href") || "";
+    if (!/^mailto:/i.test(href)) return;
+    try {
+      mailtoEmails.push(...matchEmails(decodeURIComponent(href.replace(/^mailto:/i, "").split("?")[0])));
+    } catch {
+      mailtoEmails.push(...matchEmails(href.replace(/^mailto:/i, "")));
+    }
+  });
+  const cfEmails = $("[data-cfemail]")
+    .map((_, el) => decodeCfEmail($(el).attr("data-cfemail") || "") || "")
+    .get()
+    .filter(Boolean);
 
   const socialLinks: Array<{ platform: string; url: string }> = [];
   const seenSocial = new Set<string>();
@@ -109,6 +115,29 @@ export function extractPageContent(html: string, pageUrl: string, discoveredLink
       // ignore
     }
   });
+
+  $(NOISE_SELECTORS).remove();
+
+  const paragraphs = $("p, li, h1, h2, h3, h4, article, main")
+    .map((_, el) => $(el).text().replace(/\s+/g, " ").trim())
+    .get()
+    .filter((text) => text.length > 2);
+
+  const uniqueParagraphs = [...new Set([...ownershipSnippets, ...paragraphs])].slice(0, 250);
+  const content = uniqueParagraphs.join("\n").slice(0, 20000);
+
+  const combinedText = `${html}\n${content}`;
+  const emails = unique([
+    ...mailtoEmails,
+    ...cfEmails,
+    ...matchEmails(combinedText),
+    ...deobfuscateEmails(combinedText),
+  ]);
+  const phones = unique(
+    matchAll(combinedText, PHONE_RE)
+      .map((phone) => phone.trim())
+      .filter((phone) => phone.replace(/\D/g, "").length >= 8 && phone.replace(/\D/g, "").length <= 15),
+  ).slice(0, 20);
 
   return {
     url: pageUrl,

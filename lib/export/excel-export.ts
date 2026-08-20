@@ -18,6 +18,7 @@ function technologiesCell(analysis: CompanyAnalysis): string {
 export function analysisToRow(analysis: CompanyAnalysis) {
   return {
     "Company Name": analysis.company.name ?? "",
+    "Owner Name": analysis.company.owner ?? "",
     "Company Email": analysis.company.email ?? "",
     "Company Phone": analysis.company.phone ?? "",
     Services: servicesCell(analysis),
@@ -27,6 +28,7 @@ export function analysisToRow(analysis: CompanyAnalysis) {
 
 export type ExcelDetailRow = {
   "Company Name": string;
+  "Owner Name": string;
   "Company Email": string;
   "Company Phone": string;
   Services: string;

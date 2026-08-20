@@ -18,6 +18,7 @@ export function ExportButtons({ analysis }: { analysis: CompanyAnalysis }) {
     URL.revokeObjectURL(url);
   }
 
+  
   async function downloadExcel() {
     const response = await fetch("/api/export/excel", {
       method: "POST",

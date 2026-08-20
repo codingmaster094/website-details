@@ -11,6 +11,7 @@ export function BulkExportButtons({ rows }: { rows: DetailRow[] }) {
       body: JSON.stringify({
         rows: rows.map((row) => ({
           "Company Name": row.companyName,
+          "Owner Name": row.owner ?? "",
           "Company Email": row.email ?? "",
           "Company Phone": row.phone ?? "",
           Services: row.services,
