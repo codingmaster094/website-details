@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
+import { pickCompanyPhone } from "@/lib/crawler/phones";
 import { AnalysisError, GEMINI_QUOTA_MESSAGE } from "@/lib/errors";
 import type { CompanyAnalysis } from "@/lib/validation/company-schema";
 
@@ -57,7 +58,7 @@ Rules:
 - If the official website does not name a founder and other sources are weak or conflicting, set owner to null and ownerVerified to false.
 - Do not use a random employee, designer, or team member as owner.
 - Do not guess. Unverified names must be null.
-- email and phone only from public contact listings, not invented.
+- email and phone only from public contact listings, not invented. Invalid or junk digit strings must be null.
 - services and technologies only if publicly listed.`;
 
 export async function lookupPublicCompanyFacts(
@@ -133,7 +134,7 @@ export function analysisFromPublicFacts(
       description: null,
       industry: null,
       address: null,
-      phone: facts?.phone ?? null,
+      phone: pickCompanyPhone([facts?.phone ?? null]),
       email: facts?.email ?? null,
       owner: facts?.ownerVerified ? facts.owner ?? null : null,
       foundedYear: null,
@@ -191,7 +192,7 @@ export async function enrichAnalysisFromPublicWeb(
       ...analysis.company,
       owner: analysis.company.owner || (facts.ownerVerified ? facts.owner ?? null : null),
       email: analysis.company.email || facts.email || null,
-      phone: analysis.company.phone || facts.phone || null,
+      phone: pickCompanyPhone([analysis.company.phone, facts.phone]),
       name: analysis.company.name || facts.name || null,
     },
     services,

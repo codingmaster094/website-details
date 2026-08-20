@@ -22,11 +22,17 @@ export type SignatureContext = {
   headers: Record<string, string>;
   scriptSrcs: string[];
   stylesheetHrefs: string[];
+  iframeSrcs: string[];
   metaGenerator: string | null;
 };
 
 function includesAny(haystack: string, needles: string[]): boolean {
   return needles.some((needle) => haystack.includes(needle));
+}
+
+function assetsInclude(ctx: SignatureContext, needles: string[]): boolean {
+  const haystacks = [...ctx.scriptSrcs, ...ctx.stylesheetHrefs, ...ctx.iframeSrcs, ctx.htmlLower];
+  return haystacks.some((item) => includesAny(item.toLowerCase(), needles));
 }
 
 export const TECHNOLOGY_SIGNATURES: TechnologySignature[] = [
@@ -210,5 +216,145 @@ export const TECHNOLOGY_SIGNATURES: TechnologySignature[] = [
       includesAny(ctx.htmlLower, ["paypal.com/sdk", "paypalobjects.com", "data-paypal"])
         ? "PayPal SDK or assets detected"
         : null,
+  },
+  {
+    name: "PHP",
+    category: "Other",
+    confidence: 0.85,
+    match: (ctx) =>
+      ctx.headers["x-powered-by"]?.toLowerCase().includes("php")
+        ? "x-powered-by PHP"
+        : includesAny(ctx.htmlLower, [".php?", ".php\"", ".php'"])
+          ? "PHP endpoints detected"
+          : null,
+  },
+  {
+    name: "Node.js",
+    category: "Other",
+    confidence: 0.82,
+    match: (ctx) =>
+      ctx.headers["x-powered-by"]?.toLowerCase().includes("express") ||
+      ctx.headers["x-powered-by"]?.toLowerCase().includes("nodejs")
+        ? `x-powered-by: ${ctx.headers["x-powered-by"]}`
+        : null,
+  },
+  {
+    name: "AWS",
+    category: "Hosting / CDN",
+    confidence: 0.9,
+    match: (ctx) =>
+      assetsInclude(ctx, ["amazonaws.com", "cloudfront.net", "awswaf.com"]) ? "AWS / CloudFront assets or headers detected" : null,
+  },
+  {
+    name: "jQuery",
+    category: "Frontend",
+    confidence: 0.9,
+    match: (ctx) => (assetsInclude(ctx, ["jquery"]) ? "jQuery script detected" : null),
+  },
+  {
+    name: "Bootstrap",
+    category: "Frontend",
+    confidence: 0.88,
+    match: (ctx) => (assetsInclude(ctx, ["bootstrap"]) ? "Bootstrap assets detected" : null),
+  },
+  {
+    name: "Laravel",
+    category: "Other",
+    confidence: 0.9,
+    match: (ctx) =>
+      includesAny(ctx.htmlLower, ["laravel", "csrf-token"]) && includesAny(ctx.htmlLower, ["laravel_session", "livewire"])
+        ? "Laravel markers detected"
+        : ctx.headers["set-cookie"]?.toLowerCase().includes("laravel")
+          ? "Laravel session cookie"
+          : null,
+  },
+  {
+    name: "Drupal",
+    category: "CMS",
+    confidence: 0.94,
+    match: (ctx) =>
+      includesAny(ctx.htmlLower, ["sites/default/files", "drupal.js", "drupal.settings"])
+        ? "Drupal assets detected"
+        : ctx.metaGenerator?.toLowerCase().includes("drupal")
+          ? `generator tag: ${ctx.metaGenerator}`
+          : null,
+  },
+  {
+    name: "Joomla",
+    category: "CMS",
+    confidence: 0.94,
+    match: (ctx) =>
+      includesAny(ctx.htmlLower, ["/media/jui/", "option=com_"]) || ctx.metaGenerator?.toLowerCase().includes("joomla")
+        ? "Joomla markers detected"
+        : null,
+  },
+  {
+    name: "Magento",
+    category: "Ecommerce",
+    confidence: 0.94,
+    match: (ctx) =>
+      includesAny(ctx.htmlLower, ["mage/", "magento", "static/version"]) && includesAny(ctx.htmlLower, ["mage", "checkout"])
+        ? "Magento markers detected"
+        : null,
+  },
+  {
+    name: "Nginx",
+    category: "Hosting / CDN",
+    confidence: 0.8,
+    match: (ctx) => (ctx.headers["server"]?.toLowerCase().includes("nginx") ? "Nginx server header" : null),
+  },
+  {
+    name: "Apache",
+    category: "Hosting / CDN",
+    confidence: 0.8,
+    match: (ctx) => (ctx.headers["server"]?.toLowerCase().includes("apache") ? "Apache server header" : null),
+  },
+  {
+    name: "Vercel",
+    category: "Hosting / CDN",
+    confidence: 0.95,
+    match: (ctx) => (ctx.headers["x-vercel-id"] || ctx.headers["server"]?.toLowerCase().includes("vercel") ? "Vercel headers detected" : null),
+  },
+  {
+    name: "Netlify",
+    category: "Hosting / CDN",
+    confidence: 0.95,
+    match: (ctx) => (ctx.headers["x-nf-request-id"] || includesAny(ctx.htmlLower, ["netlify"]) ? "Netlify markers detected" : null),
+  },
+  {
+    name: "reCAPTCHA",
+    category: "Other",
+    confidence: 0.92,
+    match: (ctx) => (assetsInclude(ctx, ["recaptcha", "google.com/recaptcha"]) ? "reCAPTCHA detected" : null),
+  },
+  {
+    name: "Microsoft Clarity",
+    category: "Analytics",
+    confidence: 0.95,
+    match: (ctx) => (includesAny(ctx.htmlLower, ["clarity.ms", "clarity("]) ? "Microsoft Clarity snippet detected" : null),
+  },
+  {
+    name: "LinkedIn Insight",
+    category: "Marketing",
+    confidence: 0.9,
+    match: (ctx) => (includesAny(ctx.htmlLower, ["snap.licdn.com", "linkedin.com/px"]) ? "LinkedIn Insight tag detected" : null),
+  },
+  {
+    name: "Klaviyo",
+    category: "Marketing",
+    confidence: 0.93,
+    match: (ctx) => (assetsInclude(ctx, ["klaviyo"]) ? "Klaviyo assets detected" : null),
+  },
+  {
+    name: "Mailchimp",
+    category: "Marketing",
+    confidence: 0.9,
+    match: (ctx) => (assetsInclude(ctx, ["list-manage.com", "mailchimp", "chimpstatic"]) ? "Mailchimp assets detected" : null),
+  },
+  {
+    name: "Intercom",
+    category: "Marketing",
+    confidence: 0.93,
+    match: (ctx) => (assetsInclude(ctx, ["widget.intercom.io", "intercom"]) ? "Intercom widget detected" : null),
   },
 ];

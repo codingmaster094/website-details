@@ -17,7 +17,9 @@ Fill company.email from extractedEmails or mailto / Contact page text. Prefer a 
 
 Do not invent a name or email that is not present in the provided website research payload.
 
-Do not create phone numbers.
+Do not create phone numbers. company.phone must be a real contact number found in extractedPhones or tel: links. If a value is junk digits, incomplete, or invalid, return null.
+
+Include every technology from detectedTechnologies in the technologies array. Do not collapse the list to a single CMS.
 
 Do not create services that are not supported by the website.
 

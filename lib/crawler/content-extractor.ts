@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { decodeCfEmail, deobfuscateEmails, matchEmails } from "@/lib/crawler/emails";
+import { extractPhones } from "@/lib/crawler/phones";
 
-const PHONE_RE = /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?)?\d{3,4}[\s.-]?\d{3,4}/g;
 const SOCIAL_HOSTS: Record<string, string> = {
   "facebook.com": "Facebook",
   "fb.com": "Facebook",
@@ -84,8 +84,10 @@ export function extractPageContent(html: string, pageUrl: string, discoveredLink
     .slice(0, 12);
 
   const mailtoEmails: string[] = [];
+  const telHrefs: string[] = [];
   $("a[href]").each((_, el) => {
     const href = $(el).attr("href") || "";
+    if (/^tel:/i.test(href)) telHrefs.push(href);
     if (!/^mailto:/i.test(href)) return;
     try {
       mailtoEmails.push(...matchEmails(decodeURIComponent(href.replace(/^mailto:/i, "").split("?")[0])));
@@ -133,11 +135,7 @@ export function extractPageContent(html: string, pageUrl: string, discoveredLink
     ...matchEmails(combinedText),
     ...deobfuscateEmails(combinedText),
   ]);
-  const phones = unique(
-    matchAll(combinedText, PHONE_RE)
-      .map((phone) => phone.trim())
-      .filter((phone) => phone.replace(/\D/g, "").length >= 8 && phone.replace(/\D/g, "").length <= 15),
-  ).slice(0, 20);
+  const phones = extractPhones(combinedText, telHrefs).slice(0, 20);
 
   return {
     url: pageUrl,
@@ -152,10 +150,6 @@ export function extractPageContent(html: string, pageUrl: string, discoveredLink
     jsonLd,
     links: discoveredLinks,
   };
-}
-
-function matchAll(text: string, re: RegExp): string[] {
-  return [...text.matchAll(new RegExp(re, "g"))].map((m) => m[0]);
 }
 
 function unique(items: string[]): string[] {

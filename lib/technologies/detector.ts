@@ -29,6 +29,9 @@ export function detectTechnologies(params: {
   const stylesheetHrefs = $("link[rel='stylesheet'][href]")
     .map((_, el) => $(el).attr("href") || "")
     .get();
+  const iframeSrcs = $("iframe[src]")
+    .map((_, el) => $(el).attr("src") || "")
+    .get();
   const metaGenerator = $('meta[name="generator"]').attr("content") || null;
   const headers = headerMap(params.headers);
 
@@ -38,6 +41,7 @@ export function detectTechnologies(params: {
     headers,
     scriptSrcs,
     stylesheetHrefs,
+    iframeSrcs,
     metaGenerator,
   };
 

@@ -3,6 +3,7 @@ import { AnalysisError, GEMINI_QUOTA_MESSAGE } from "@/lib/errors";
 import type { CrawlResult } from "@/lib/crawler/website-crawler";
 import { ownerFromJsonLd, ownerFromPageText, pickVerifiedOwner } from "@/lib/analysis/owner";
 import { isContactPageUrl, pickCompanyEmail } from "@/lib/crawler/emails";
+import { pickCompanyPhone } from "@/lib/crawler/phones";
 import { OUTPUT_SCHEMA_INSTRUCTIONS, SYSTEM_PROMPT } from "@/lib/gemini/prompts";
 import { companyAnalysisSchema, type CompanyAnalysis } from "@/lib/validation/company-schema";
 
@@ -101,7 +102,7 @@ export function analysisFromCrawl(crawl: CrawlResult): CompanyAnalysis {
       description: homepage?.description || homepage?.content.slice(0, 280) || null,
       industry: null,
       address: null,
-      phone: crawl.phones[0] || null,
+      phone: pickCompanyPhone(crawl.phones),
       email: pickCompanyEmail(
         crawl.emails,
         crawl.websiteUrl,
@@ -185,7 +186,7 @@ function mergeDeterministicSignals(analysis: CompanyAnalysis, crawl: CrawlResult
       crawl.websiteUrl,
       crawl.pages.filter((page) => isContactPageUrl(page.url)).flatMap((page) => page.emails),
     ),
-    phone: analysis.company.phone || crawl.phones[0] || null,
+    phone: pickCompanyPhone([analysis.company.phone, ...crawl.phones]),
     owner: pickVerifiedOwner(analysis, crawl.jsonLd, crawl.pages.map((page) => `${page.title}\n${page.headings.join(" ")}\n${page.content}`).join("\n")),
   };
 
