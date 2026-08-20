@@ -55,7 +55,7 @@ export default function HomePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
-        signal: AbortSignal.timeout(55_000),
+        signal: AbortSignal.timeout(58_000),
       });
       const payload = await readAnalyzePayload<CompanyAnalysis>(response);
       if (!payload.success) {

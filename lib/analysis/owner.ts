@@ -1,7 +1,7 @@
 import type { CompanyAnalysis } from "@/lib/validation/company-schema";
 
 const OWNER_ROLE =
-  /\b(owner|co-?owner|founder|co-?founder|ceo|chief executive|president|principal|managing director|proprietor)\b/i;
+  /\b(owner|co-?owner|founder|co-?founder|ceo|chief executive|president|principal|managing director|director|proprietor)\b/i;
 
 function personName(value: unknown): string | null {
   if (!value) return null;
@@ -55,11 +55,19 @@ export function ownerFromPageText(text: string): string | null {
   return null;
 }
 
-export function resolveOwner(analysis: CompanyAnalysis, jsonLd: unknown[], pageText = ""): string | null {
-  return (
-    analysis.company.owner?.trim() ||
-    ownerFromTeam(analysis.team) ||
-    ownerFromJsonLd(jsonLd) ||
-    ownerFromPageText(pageText)
-  );
+export function pickVerifiedOwner(analysis: CompanyAnalysis, jsonLd: unknown[], pageText = ""): string | null {
+  const jsonLdOwner = ownerFromJsonLd(jsonLd);
+  if (jsonLdOwner) return jsonLdOwner;
+  const teamOwner = ownerFromTeam(analysis.team);
+  if (teamOwner) return teamOwner;
+  const textOwner = ownerFromPageText(pageText);
+  if (textOwner) return textOwner;
+
+  const candidate = analysis.company.owner?.trim();
+  if (!candidate) return null;
+  const corpus = `${pageText}\n${analysis.team.map((member) => `${member.name} ${member.role} ${member.evidence}`).join("\n")}`;
+  const idx = corpus.toLowerCase().indexOf(candidate.toLowerCase());
+  if (idx < 0) return null;
+  const window = corpus.slice(Math.max(0, idx - 140), idx + candidate.length + 140);
+  return OWNER_ROLE.test(window) ? candidate : null;
 }

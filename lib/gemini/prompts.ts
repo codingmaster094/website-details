@@ -8,9 +8,10 @@ NEVER invent, guess, assume, or hallucinate company information.
 
 If a requested field cannot be reliably determined from the provided website content, return null.
 
-Fill company.owner whenever the crawled pages (especially About, Team, and Contact), headings, footer text, or JSON-LD identify a person as Founder, Co-Founder, Owner, CEO, President, Principal, Managing Director, or equivalent.
+Fill company.owner only when the crawled pages explicitly identify that person as Founder, Co-Founder, Owner, CEO, President, Principal, Managing Director, or Director.
 
-If that person is listed in team, copy the same name into company.owner. Do not leave company.owner null when team or page text already names a founder/owner/CEO.
+Never use a random team member, employee, designer, or author as company.owner.
+If the About page does not name a founder, return owner null.
 
 Fill company.email from extractedEmails or mailto / Contact page text. Prefer a real company address such as info@, hello@, contact@, or a same-domain email from /contact. Do not leave company.email null when extractedEmails contains a usable address.
 

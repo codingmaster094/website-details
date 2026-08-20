@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { AnalysisError, GEMINI_QUOTA_MESSAGE } from "@/lib/errors";
 import type { CrawlResult } from "@/lib/crawler/website-crawler";
-import { ownerFromJsonLd, ownerFromPageText, resolveOwner } from "@/lib/analysis/owner";
+import { ownerFromJsonLd, ownerFromPageText, pickVerifiedOwner } from "@/lib/analysis/owner";
 import { isContactPageUrl, pickCompanyEmail } from "@/lib/crawler/emails";
 import { OUTPUT_SCHEMA_INSTRUCTIONS, SYSTEM_PROMPT } from "@/lib/gemini/prompts";
 import { companyAnalysisSchema, type CompanyAnalysis } from "@/lib/validation/company-schema";
@@ -186,7 +186,7 @@ function mergeDeterministicSignals(analysis: CompanyAnalysis, crawl: CrawlResult
       crawl.pages.filter((page) => isContactPageUrl(page.url)).flatMap((page) => page.emails),
     ),
     phone: analysis.company.phone || crawl.phones[0] || null,
-    owner: resolveOwner(analysis, crawl.jsonLd, crawl.pages.map((page) => `${page.title}\n${page.headings.join(" ")}\n${page.content}`).join("\n")),
+    owner: pickVerifiedOwner(analysis, crawl.jsonLd, crawl.pages.map((page) => `${page.title}\n${page.headings.join(" ")}\n${page.content}`).join("\n")),
   };
 
   const techNames = new Set(analysis.technologies.map((t) => t.name.toLowerCase()));

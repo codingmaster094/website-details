@@ -8,7 +8,7 @@ import { canonicalizeUrl, isSameRegistrableDomain, normalizeWebsiteUrl } from "@
 import { detectTechnologies, mergeTechnologies, type DetectedTechnology } from "@/lib/technologies/detector";
 
 const USER_AGENT =
-  "WebsiteIntelligenceBot/1.0 (+https://localhost) Mozilla/5.0 compatible research crawler";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 export type CrawlResult = {
   websiteUrl: string;
