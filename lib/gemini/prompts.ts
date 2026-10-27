@@ -41,6 +41,7 @@ export const OUTPUT_SCHEMA_INSTRUCTIONS = `Return exactly this JSON structure:
     "owner": null,
     "foundedYear": null
   },
+  
   "services": [
     {
       "name": "",
