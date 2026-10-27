@@ -1,54 +1,11 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { AnalysisError, GEMINI_QUOTA_MESSAGE } from "@/lib/errors";
+import { AnalysisError } from "@/lib/errors";
 import type { CrawlResult } from "@/lib/crawler/website-crawler";
 import { ownerFromJsonLd, ownerFromPageText, pickVerifiedOwner } from "@/lib/analysis/owner";
 import { isContactPageUrl, pickCompanyEmail } from "@/lib/crawler/emails";
 import { pickCompanyPhone } from "@/lib/crawler/phones";
+import { generateGeminiText } from "@/lib/gemini/client";
 import { OUTPUT_SCHEMA_INSTRUCTIONS, SYSTEM_PROMPT } from "@/lib/gemini/prompts";
 import { companyAnalysisSchema, type CompanyAnalysis } from "@/lib/validation/company-schema";
-
-const DEFAULT_MODEL = "gemini-3.6-flash";
-const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"];
-
-function getApiKey() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new AnalysisError("CONFIG_ERROR", "GEMINI_API_KEY is not configured on the server.", 500);
-  }
-  return apiKey;
-}
-
-function normalizeModelName(value?: string | null) {
-  const name = value?.trim().replace(/^["']|["']$/g, "") || DEFAULT_MODEL;
-  if (/gemini-2\./i.test(name) || /2\.5-flash/i.test(name)) return DEFAULT_MODEL;
-  return name;
-}
-
-function modelCandidates() {
-  return [...new Set([normalizeModelName(process.env.GEMINI_MODEL), ...FALLBACK_MODELS])];
-}
-
-function getModel(modelName: string) {
-  const genAI = new GoogleGenerativeAI(getApiKey());
-  return genAI.getGenerativeModel({
-    model: modelName,
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: "application/json",
-      maxOutputTokens: 4096,
-    },
-  });
-}
-
-function isQuotaError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /429|Too Many Requests|quota|RESOURCE_EXHAUSTED/i.test(message);
-}
-
-function isUnavailableModel(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /404 Not Found|no longer available|not found/i.test(message);
-}
 
 function buildUserPrompt(crawl: CrawlResult, contentLimit: number): string {
   const pages = [...crawl.pages]
@@ -82,7 +39,16 @@ function extractJson(text: string): unknown {
   const trimmed = text.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1].trim() : trimmed;
-  return JSON.parse(candidate);
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    const firstBrace = candidate.indexOf("{");
+    const lastBrace = candidate.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      return JSON.parse(candidate.slice(firstBrace, lastBrace + 1));
+    }
+    throw new Error("Unable to parse JSON from AI response");
+  }
 }
 
 export function analysisFromCrawl(crawl: CrawlResult): CompanyAnalysis {
@@ -95,9 +61,11 @@ export function analysisFromCrawl(crawl: CrawlResult): CompanyAnalysis {
     }
   })();
 
+  const cleanName = cleanCompanyName(homepage?.title, host);
+
   return {
     company: {
-      name: homepage?.title || host,
+      name: cleanName,
       website: crawl.websiteUrl,
       description: homepage?.description || homepage?.content.slice(0, 280) || null,
       industry: null,
@@ -135,46 +103,51 @@ export function analysisFromCrawl(crawl: CrawlResult): CompanyAnalysis {
   };
 }
 
+function cleanCompanyName(title: string | null | undefined, fallback: string): string {
+  if (!title) return fallback;
+  const parts = title.split(/[|\-–—:]/);
+  const first = parts[0]?.trim();
+  if (first && first.length >= 2 && first.length <= 50 && !/^(home|welcome|index|homepage)/i.test(first)) {
+    return first;
+  }
+  return fallback;
+}
+
 export async function analyzeCompanyWithGemini(
   crawl: CrawlResult,
 ): Promise<CompanyAnalysis> {
-  const userPayload = buildUserPrompt(crawl, 6000);
+  const userPayload = buildUserPrompt(crawl, 8000);
   const prompt = `${SYSTEM_PROMPT}\n\n${OUTPUT_SCHEMA_INSTRUCTIONS}\n\nWebsite research payload:\n${userPayload}`;
-  const models = modelCandidates();
-  const attempts = 1;
 
-  let lastQuotaError: unknown;
+  try {
+    const text = await generateGeminiText(prompt, {
+      maxTokens: 6000,
+      jsonMode: true,
+    });
 
-  for (const modelName of models) {
-    const model = getModel(modelName);
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      try {
-        const result = await model.generateContent({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-        });
-        const text = result.response.text();
-        if (!text) continue;
-        const parsed = extractJson(text);
-        const validated = companyAnalysisSchema.safeParse(parsed);
-        if (!validated.success) continue;
+    if (text) {
+      const parsed = extractJson(text);
+      const validated = companyAnalysisSchema.safeParse(parsed);
+      if (validated.success) {
         return mergeDeterministicSignals(validated.data, crawl);
-      } catch (error) {
-        if (error instanceof AnalysisError && error.code === "CONFIG_ERROR") throw error;
-        if (isQuotaError(error)) {
-          lastQuotaError = error;
-          break;
-        }
-        if (isUnavailableModel(error)) break;
       }
     }
-  }
-
-  if (lastQuotaError) {
-    throw new AnalysisError("RATE_LIMITED", GEMINI_QUOTA_MESSAGE, 429);
+  } catch (error) {
+    if (error instanceof AnalysisError && error.code === "CONFIG_ERROR") {
+      throw error;
+    }
+    if (error instanceof AnalysisError && error.code === "RATE_LIMITED") {
+      throw error;
+    }
+    // Fall back to crawl data if Gemini encounters non-fatal issue
+    console.error("Gemini analysis error:", error);
   }
 
   return analysisFromCrawl(crawl);
 }
+
+// Backwards-compatibility alias
+export const analyzeCompanyWithGroq = analyzeCompanyWithGemini;
 
 function mergeDeterministicSignals(analysis: CompanyAnalysis, crawl: CrawlResult): CompanyAnalysis {
   const social = analysis.socialMedia.length > 0 ? analysis.socialMedia : crawl.socialLinks;
@@ -187,7 +160,11 @@ function mergeDeterministicSignals(analysis: CompanyAnalysis, crawl: CrawlResult
       crawl.pages.filter((page) => isContactPageUrl(page.url)).flatMap((page) => page.emails),
     ),
     phone: pickCompanyPhone([analysis.company.phone, ...crawl.phones]),
-    owner: pickVerifiedOwner(analysis, crawl.jsonLd, crawl.pages.map((page) => `${page.title}\n${page.headings.join(" ")}\n${page.content}`).join("\n")),
+    owner: pickVerifiedOwner(
+      analysis,
+      crawl.jsonLd,
+      crawl.pages.map((page) => `${page.title}\n${page.headings.join(" ")}\n${page.content}`).join("\n"),
+    ),
   };
 
   const techNames = new Set(analysis.technologies.map((t) => t.name.toLowerCase()));

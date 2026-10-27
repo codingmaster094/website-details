@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import { AnalysisError } from "@/lib/errors";
 import { extractPageContent, type ExtractedPage } from "@/lib/crawler/content-extractor";
 import { isContactPageUrl } from "@/lib/crawler/emails";
@@ -93,29 +92,12 @@ async function fetchWithLimits(
         throw new AnalysisError("NO_CONTENT", "The website response is too large to analyze safely.");
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        const text = await response.text();
-        if (text.length > maxBytes) {
-          throw new AnalysisError("NO_CONTENT", "The website response is too large to analyze safely.");
-        }
-        return { url: response.url || url, html: text, headers: response.headers };
+      const text = await response.text();
+      if (text.length > maxBytes) {
+        throw new AnalysisError("NO_CONTENT", "The website response is too large to analyze safely.");
       }
 
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        received += value.byteLength;
-        if (received > maxBytes) {
-          await reader.cancel();
-          throw new AnalysisError("NO_CONTENT", "The website response is too large to analyze safely.");
-        }
-        chunks.push(value);
-      }
-      const html = new TextDecoder("utf-8").decode(Buffer.concat(chunks.map((c) => Buffer.from(c))));
-      return { url: response.url || url, html, headers: response.headers };
+      return { url: response.url || url, html: text, headers: response.headers };
     } catch (error) {
       lastError = error;
       if (error instanceof AnalysisError) throw error;

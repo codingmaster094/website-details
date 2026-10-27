@@ -6,8 +6,8 @@ export class AnalysisError extends Error {
       | "TIMEOUT"
       | "ACCESS_DENIED"
       | "NO_CONTENT"
-      | "GEMINI_ERROR"
-      | "INVALID_GEMINI_RESPONSE"
+      | "AI_ERROR"
+      | "INVALID_AI_RESPONSE"
       | "RATE_LIMITED"
       | "SSRF_BLOCKED"
       | "CONFIG_ERROR"
@@ -24,12 +24,14 @@ export class AnalysisError extends Error {
 export const CRAWLER_DENIED_MESSAGE = "The website denied access to this crawler.";
 
 export const GEMINI_QUOTA_MESSAGE =
-  "Gemini quota is exhausted. Wait for the daily reset, or enable billing in Google AI Studio.";
+  "Gemini rate limit reached. Please wait a moment and try again, or review your Google AI Studio quota limits.";
 
-export function isGeminiQuotaError(error?: { code?: string; message?: string } | null): boolean {
+export const GROQ_QUOTA_MESSAGE = GEMINI_QUOTA_MESSAGE;
+
+export function isAiQuotaError(error?: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   if (error.code === "RATE_LIMITED") return true;
-  return /quota is exhausted|429|Too Many Requests/i.test(error.message || "");
+  return /rate limit|429|Too Many Requests|quota|RESOURCE_EXHAUSTED/i.test(error.message || "");
 }
 
 export function isCrawlerDenied(error?: { code?: string; message?: string } | null): boolean {

@@ -1,11 +1,16 @@
 const WINDOW_MS = 60_000;
-const MAX_REQUESTS = 45;
+const MAX_REQUESTS = 60;
 
 type Bucket = { timestamps: number[] };
 
 const buckets = new Map<string, Bucket>();
 
 export function rateLimit(key: string): { allowed: boolean; retryAfterSeconds: number } {
+  // Never rate-limit local loopback or local testing
+  if (key === "127.0.0.1" || key === "::1" || key === "localhost") {
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
   const now = Date.now();
   const bucket = buckets.get(key) ?? { timestamps: [] };
   bucket.timestamps = bucket.timestamps.filter((ts) => now - ts < WINDOW_MS);

@@ -99,8 +99,8 @@ export function forcedContactUrls(origin: URL, discovered: string[]): string[] {
       return false;
     }
   });
-  if (fromSite.length > 0) return [...new Set(fromSite.slice(0, 1))];
-  return [new URL("/contact", origin).toString()];
+  if (fromSite.length > 0) return [...new Set(fromSite.slice(0, 2))];
+  return [];
 }
 
 export function toAbsoluteUrl(href: string, base: string): string | null {

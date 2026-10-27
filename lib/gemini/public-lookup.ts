@@ -1,11 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
 import { pickCompanyPhone } from "@/lib/crawler/phones";
 import { AnalysisError, GEMINI_QUOTA_MESSAGE } from "@/lib/errors";
+import { generateGeminiText } from "@/lib/gemini/client";
 import type { CompanyAnalysis } from "@/lib/validation/company-schema";
-
-const DEFAULT_MODEL = "gemini-3.6-flash";
-const FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"];
 
 const publicFactsSchema = z.object({
   name: z.string().nullable().optional(),
@@ -19,29 +16,30 @@ const publicFactsSchema = z.object({
 
 export type PublicCompanyFacts = z.infer<typeof publicFactsSchema>;
 
-function getApiKey() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new AnalysisError("CONFIG_ERROR", "GEMINI_API_KEY is not configured on the server.", 500);
-  }
-  return apiKey;
-}
-
 function isQuotaError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return /429|Too Many Requests|quota|RESOURCE_EXHAUSTED/i.test(message);
+  return /429|Too Many Requests|rate.?limit|quota|RESOURCE_EXHAUSTED/i.test(message);
 }
 
 function extractJson(text: string): unknown {
   const trimmed = text.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1].trim() : trimmed;
-  return JSON.parse(candidate);
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    const firstBrace = candidate.indexOf("{");
+    const lastBrace = candidate.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      return JSON.parse(candidate.slice(firstBrace, lastBrace + 1));
+    }
+    throw new Error("Unable to parse JSON from lookup response");
+  }
 }
 
-const LOOKUP_PROMPT = `Use Google Search on public sources for this company.
+const LOOKUP_PROMPT = `Use Google Search to find verified public facts for this company.
 
-Return JSON only:
+Return JSON only in this exact format:
 {
   "name": null,
   "owner": null,
@@ -53,44 +51,39 @@ Return JSON only:
 }
 
 Rules:
-- ownerVerified must be true only when a reliable source names that person as Founder, Co-Founder, Owner, CEO, Director, Managing Director, or equivalent.
-- Reliable sources: official company website, LinkedIn company/founder profile, news, or the person publicly stating they founded the company.
-- If the official website does not name a founder and other sources are weak or conflicting, set owner to null and ownerVerified to false.
-- Do not use a random employee, designer, or team member as owner.
-- Do not guess. Unverified names must be null.
-- email and phone only from public contact listings, not invented. Invalid or junk digit strings must be null.
-- services and technologies only if publicly listed.`;
+- ownerVerified must be true ONLY when a reliable source explicitly names that person as Founder, Co-Founder, Owner, CEO, President, or Managing Director.
+- Reliable sources: official company website, official LinkedIn company profile/founder, Wikipedia, or reputable press.
+- If no verified founder or CEO is confirmed, set owner to null and ownerVerified to false.
+- Do NOT use a random employee, designer, or team member as owner.
+- Do NOT guess or hallucinate. Unverified fields must be null.
+- email and phone must only be genuine public contact details from official listings. Invalid or dummy strings must be null.
+- services: list the actual commercial services the company provides.
+- technologies: list technologies or platforms publicly associated with the company or their website.`;
 
 export async function lookupPublicCompanyFacts(
   websiteUrl: string,
   companyName?: string | null,
 ): Promise<PublicCompanyFacts | null> {
-  const genAI = new GoogleGenerativeAI(getApiKey());
   const prompt = `${LOOKUP_PROMPT}\n\nWebsite: ${websiteUrl}\nCompany name hint: ${companyName || "unknown"}`;
   let lastQuota: unknown;
 
-  for (const modelName of [...new Set([process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL, ...FALLBACK_MODELS])]) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        tools: [{ googleSearchRetrieval: {} }] as never,
-        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
-      });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      if (!text) continue;
+  try {
+    const text = await generateGeminiText(prompt, {
+      maxTokens: 2048,
+      googleSearch: true,
+      timeoutMs: 8_000,
+    });
+    if (text) {
       const parsed = publicFactsSchema.safeParse(extractJson(text));
-      if (!parsed.success) continue;
-      const facts = parsed.data;
-      if (!facts.ownerVerified) facts.owner = null;
-      return facts;
-    } catch (error) {
-      if (error instanceof AnalysisError && error.code === "CONFIG_ERROR") throw error;
-      if (isQuotaError(error)) {
-        lastQuota = error;
-        break;
+      if (parsed.success) {
+        const facts = parsed.data;
+        if (!facts.ownerVerified) facts.owner = null;
+        return facts;
       }
     }
+  } catch (error) {
+    if (error instanceof AnalysisError && error.code === "CONFIG_ERROR") throw error;
+    if (isQuotaError(error)) lastQuota = error;
   }
 
   if (lastQuota) {

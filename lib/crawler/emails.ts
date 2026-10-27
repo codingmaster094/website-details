@@ -1,6 +1,6 @@
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 const JUNK =
-  /noreply|no-?reply|donotreply|mailer-daemon|sentry\.io|wixpress|wordpress@|example\.com|privacy@|legal@|abuse@|webmaster@|hostmaster@|\.png$|\.jpg$|\.js$/i;
+  /noreply|no-?reply|donotreply|mailer-daemon|sentry\.io|wixpress|wordpress@|example\.com|privacy@|legal@|abuse@|webmaster@|hostmaster@|user@domain\.com|name@email\.com|test@test\.com|john@doe\.com|email@example\.com|you@yourdomain\.com|yourname@company\.com|username@domain\.com|\.(png|jpg|jpeg|gif|webp|svg|js|css|woff2?|ico|map)(\b|\?|$)/i;
 const PREFERRED_LOCAL = /^(info|hello|hi|contact|enquir(?:y|ies)|sales|support|admin|office|team|mail)$/i;
 
 export function decodeCfEmail(hex: string): string | null {
@@ -11,7 +11,8 @@ export function decodeCfEmail(hex: string): string | null {
     for (let i = 2; i < hex.length; i += 2) {
       out += String.fromCharCode(Number.parseInt(hex.slice(i, i + 2), 16) ^ key);
     }
-    return EMAIL_RE.test(out) ? out : null;
+    const cleaned = out.trim().replace(/[.,;:)\]]+$/, "");
+    return EMAIL_RE.test(cleaned) && !JUNK.test(cleaned) ? cleaned : null;
   } catch {
     return null;
   }
@@ -19,14 +20,21 @@ export function decodeCfEmail(hex: string): string | null {
 
 export function deobfuscateEmails(text: string): string[] {
   const normalized = text
-    .replace(/\s*[\[(]?\s*(?:at|AT)\s*[\])]?\s*/g, "@")
-    .replace(/\s*[\[(]?\s*(?:dot|DOT)\s*[\])]?\s*/g, ".");
+    .replace(/(?:\s*[\[(]\s*at\s*[\])]\s*|\s+at\s+)/gi, "@")
+    .replace(/(?:\s*[\[(]\s*dot\s*[\])]\s*|\s+dot\s+)/gi, ".");
   return matchEmails(normalized);
 }
 
 export function matchEmails(text: string): string[] {
   return [...text.matchAll(new RegExp(EMAIL_RE, "g"))]
-    .map((m) => m[0].replace(/^mailto:/i, "").split("?")[0].trim().toLowerCase())
+    .map((m) =>
+      m[0]
+        .replace(/^mailto:/i, "")
+        .split("?")[0]
+        .trim()
+        .replace(/[.,;:)\]]+$/, "")
+        .toLowerCase(),
+    )
     .filter((email) => email.includes("@") && !JUNK.test(email));
 }
 

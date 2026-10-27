@@ -77,14 +77,30 @@ export function extractPageContent(html: string, pageUrl: string, discoveredLink
     }
   });
 
+  const jsonLdEmails: string[] = [];
+  const jsonLdPhones: string[] = [];
+  for (const item of jsonLd) {
+    if (item && typeof item === "object") {
+      const rec = item as Record<string, unknown>;
+      if (typeof rec.email === "string") jsonLdEmails.push(...matchEmails(rec.email));
+      if (typeof rec.telephone === "string") jsonLdPhones.push(rec.telephone);
+    }
+  }
+
   const ownershipSnippets = $("header, footer, [class*='footer' i], [id*='footer' i], [class*='about' i], [class*='team' i], p, li, h1, h2, h3, h4")
     .map((_, el) => $(el).text().replace(/\s+/g, " ").trim())
     .get()
     .filter((text) => text.length > 8 && text.length < 400 && OWNERSHIP_HINT.test(text))
     .slice(0, 12);
 
+  const navMenuItems = $("nav a, [role='navigation'] a, header a")
+    .map((_, el) => $(el).text().replace(/\s+/g, " ").trim())
+    .get()
+    .filter((text) => text.length > 2 && text.length < 60 && !/^(home|login|sign in|sign up|cart|search|menu|account|checkout)$/i.test(text))
+    .slice(0, 30);
+
   const mailtoEmails: string[] = [];
-  const telHrefs: string[] = [];
+  const telHrefs: string[] = [...jsonLdPhones];
   $("a[href]").each((_, el) => {
     const href = $(el).attr("href") || "";
     if (/^tel:/i.test(href)) telHrefs.push(href);
@@ -95,6 +111,7 @@ export function extractPageContent(html: string, pageUrl: string, discoveredLink
       mailtoEmails.push(...matchEmails(href.replace(/^mailto:/i, "")));
     }
   });
+
   const cfEmails = $("[data-cfemail]")
     .map((_, el) => decodeCfEmail($(el).attr("data-cfemail") || "") || "")
     .get()
@@ -125,17 +142,18 @@ export function extractPageContent(html: string, pageUrl: string, discoveredLink
     .get()
     .filter((text) => text.length > 2);
 
-  const uniqueParagraphs = [...new Set([...ownershipSnippets, ...paragraphs])].slice(0, 250);
+  const menuContext = navMenuItems.length > 0 ? [`Navigation & Services: ${navMenuItems.join(", ")}`] : [];
+  const uniqueParagraphs = [...new Set([...ownershipSnippets, ...menuContext, ...paragraphs])].slice(0, 250);
   const content = uniqueParagraphs.join("\n").slice(0, 20000);
 
-  const combinedText = `${html}\n${content}`;
   const emails = unique([
     ...mailtoEmails,
     ...cfEmails,
-    ...matchEmails(combinedText),
-    ...deobfuscateEmails(combinedText),
+    ...jsonLdEmails,
+    ...matchEmails(content),
+    ...deobfuscateEmails(content),
   ]);
-  const phones = extractPhones(combinedText, telHrefs).slice(0, 20);
+  const phones = extractPhones(content, telHrefs).slice(0, 20);
 
   return {
     url: pageUrl,

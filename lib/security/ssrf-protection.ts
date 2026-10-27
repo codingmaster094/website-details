@@ -3,6 +3,8 @@ import net from "node:net";
 import { AnalysisError } from "@/lib/errors";
 import { assertHttpUrl } from "@/lib/security/url-validator";
 
+const DNS_CACHE = new Map<string, { safe: boolean; expires: number }>();
+
 function ipv4ToInt(ip: string): number {
   return ip.split(".").reduce((acc, octet) => (acc << 8) + Number(octet), 0) >>> 0;
 }
@@ -58,6 +60,14 @@ export async function assertSafePublicUrl(url: string): Promise<URL> {
     return parsed;
   }
 
+  const cached = DNS_CACHE.get(hostname);
+  if (cached && cached.expires > Date.now()) {
+    if (!cached.safe) {
+      throw new AnalysisError("SSRF_BLOCKED", "The hostname resolves to a private or internal address.");
+    }
+    return parsed;
+  }
+
   let records: string[] = [];
   try {
     const resolved = await dns.lookup(hostname, { all: true, verbatim: true });
@@ -66,7 +76,10 @@ export async function assertSafePublicUrl(url: string): Promise<URL> {
     throw new AnalysisError("WEBSITE_UNAVAILABLE", "Could not resolve the website hostname.");
   }
 
-  if (records.length === 0 || records.some(isPrivateIp)) {
+  const isSafe = records.length > 0 && !records.some(isPrivateIp);
+  DNS_CACHE.set(hostname, { safe: isSafe, expires: Date.now() + 10 * 60 * 1000 });
+
+  if (!isSafe) {
     throw new AnalysisError("SSRF_BLOCKED", "The hostname resolves to a private or internal address.");
   }
 

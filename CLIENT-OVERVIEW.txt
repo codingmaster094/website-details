@@ -74,11 +74,11 @@ Step 4: Technologies are detected from the website code
         Google Analytics, Google Tag Manager, etc.
         A technology is listed only when there is evidence.
 
-Step 5: Collected website text is sent to Gemini AI
-        Gemini does NOT browse the website itself.
+Step 5: Collected website text is sent to Groq AI
+        Groq analyzes the content collected by the crawler.
         It only reads the content collected by our crawler.
 
-Step 6: Gemini returns structured company data in JSON
+Step 6: Groq returns structured company data in JSON
 
 Step 7: The system validates that JSON
         If a field is not clearly available on the website,
@@ -151,10 +151,10 @@ Shared result is reused.
 
 9. AI MODEL USED
 ----------------
-The analysis engine uses Google Gemini.
+The analysis engine uses Groq.
 
 Recommended for daily 40+ companies:
-GEMINI_MODEL = gemini-3.6-flash
+GROQ_MODEL = openai/gpt-oss-120b
 
 Why this model:
 - Fast enough for bulk daily research

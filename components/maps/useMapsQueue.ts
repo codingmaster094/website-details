@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CRAWLER_DENIED_MESSAGE, isCrawlerDenied, isGeminiQuotaError } from "@/lib/errors";
+import { CRAWLER_DENIED_MESSAGE, isAiQuotaError, isCrawlerDenied } from "@/lib/errors";
 import { friendlyClientError, readAnalyzePayload } from "@/lib/client/read-analyze-payload";
 import type { CompanyAnalysis } from "@/lib/validation/company-schema";
 import { normalizeWebsiteKey } from "@/lib/maps/website";
@@ -91,7 +91,7 @@ export function useMapsQueue() {
           });
           return;
         }
-        if (isGeminiQuotaError(analyzePayload.error)) {
+        if (isAiQuotaError(analyzePayload.error)) {
           throw Object.assign(new Error(analyzePayload.error.message), { code: "RATE_LIMITED" });
         }
         throw new Error(analyzePayload.error.message || "Website analysis failed.");
@@ -120,7 +120,7 @@ export function useMapsQueue() {
           await processOne(next);
         } catch (err) {
           const message = friendlyClientError(err);
-          const quotaHit = isGeminiQuotaError({
+          const quotaHit = isAiQuotaError({
             code: typeof err === "object" && err && "code" in err ? String((err as { code?: string }).code) : undefined,
             message,
           });
