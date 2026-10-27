@@ -26,7 +26,7 @@ For every service: provide name, description from the page, evidence quote, sour
 
 For every technology provide name, category, evidence, sourceUrl, confidence.
 
-Return valid JSON only. No explanations outside the JSON.`;
+Return valid JSON only. No explanations outside the JSON.`; 
 
 export const OUTPUT_SCHEMA_INSTRUCTIONS = `Return exactly this JSON structure:
 {
