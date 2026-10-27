@@ -3,7 +3,6 @@ import { pickCompanyPhone } from "@/lib/crawler/phones";
 import { AnalysisError, GEMINI_QUOTA_MESSAGE } from "@/lib/errors";
 import { generateGeminiText } from "@/lib/gemini/client";
 import type { CompanyAnalysis } from "@/lib/validation/company-schema";
-
 const publicFactsSchema = z.object({
   name: z.string().nullable().optional(),
   owner: z.string().nullable().optional(),
@@ -13,7 +12,6 @@ const publicFactsSchema = z.object({
   services: z.array(z.string()).default([]),
   technologies: z.array(z.string()).default([]),
 });
-
 export type PublicCompanyFacts = z.infer<typeof publicFactsSchema>;
 
 function isQuotaError(error: unknown) {
